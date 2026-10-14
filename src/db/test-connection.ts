@@ -1,16 +1,16 @@
-import { pool } from "./pool.js";
+import { db, client } from "./client.js";
+import { sql } from "drizzle-orm";
 
-// Test the connection to PostgreSQL
 async function testConnection() {
   try {
-    const result = await pool.query("SELECT NOW()");
+    const result = await db.execute(sql`SELECT current_database() AS database`);
 
     console.log("Database connection successful!");
-    console.log("Current database time:", result.rows[0].now);
+    console.log(result);
   } catch (error) {
     console.error("Database connection failed:", error);
   } finally {
-    await pool.end();
+    await client.end();
   }
 }
 
