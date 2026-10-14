@@ -1,5 +1,6 @@
 import express from "express";
 import plansRouter from "./routes/plans.routes.js";
+import usersRouter from "./routes/users.routes.js";
 
 import accountsRouter from "./routes/accounts.routes.js";
 
@@ -10,7 +11,7 @@ app.use(express.json());
 const PORT = 3000;
 
 app.use(plansRouter);
-
+app.use("/api/users", usersRouter);
 app.use(accountsRouter);
 
 // Start the HTTP server
