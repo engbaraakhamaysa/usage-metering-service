@@ -5,6 +5,7 @@ import {
   check,
   foreignKey,
   varchar,
+  unique,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -40,5 +41,7 @@ export const users = pgTable(
       foreignColumns: [plans.id, plans.planType],
       name: "users_plan_type_fkey",
     }),
+
+    unique("users_id_account_id_unique").on(table.id, table.accountId),
   ],
 );
