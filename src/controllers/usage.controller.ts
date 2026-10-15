@@ -1,10 +1,8 @@
 import type { Request, Response } from "express";
 
-import {
-  consumeUsage,
-  getAccountUsage,
-  getUserUsage,
-} from "../services/usage.service.js";
+import { getAccountUsage, getUserUsage } from "../services/usage.service.js";
+
+import { consumeUsageWithRecord } from "../services/usage-records.service.js";
 
 // GET /api/usage/account/:accountId
 export async function getAccountUsageController(
@@ -66,12 +64,14 @@ export async function consumeUsageController(
   res: Response,
 ): Promise<void> {
   try {
-    const { accountId, userId, units } = req.body;
+    const { accountId, userId, requestId, units } = req.body;
 
     // Validate request data
     if (
       typeof accountId !== "string" ||
       typeof userId !== "string" ||
+      typeof requestId !== "string" ||
+      !requestId.trim() ||
       typeof units !== "number" ||
       !Number.isInteger(units) ||
       units <= 0
@@ -80,10 +80,18 @@ export async function consumeUsageController(
       return;
     }
 
-    const result = await consumeUsage(accountId, userId, units);
+    const result = await consumeUsageWithRecord(
+      accountId,
+      userId,
+      requestId,
+      units,
+    );
 
     if (!result.success) {
-      res.status(result.status).json({ error: result.message });
+      res.status(result.status).json({
+        error: result.message,
+        ...("data" in result ? { data: result.data } : {}),
+      });
       return;
     }
 
