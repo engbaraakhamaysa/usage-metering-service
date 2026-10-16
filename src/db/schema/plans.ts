@@ -1,19 +1,20 @@
 import {
   pgTable,
-  pgEnum,
   uuid,
   varchar,
   integer,
   timestamp,
-  foreignKey,
+  pgEnum,
   check,
   unique,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
 
+// Define the types of plans
 export const planTypeEnum = pgEnum("plan_type", ["account", "user"]);
 
+// Define the plans table
 export const plans = pgTable(
   "plans",
   {
@@ -29,12 +30,6 @@ export const plans = pgTable(
 
     ownerAccountId: uuid("owner_account_id"),
 
-    parentPlanId: uuid("parent_plan_id"),
-
-    parentPlanType: planTypeEnum("parent_plan_type")
-      .default("account")
-      .notNull(),
-
     createdAt: timestamp("created_at", {
       withTimezone: true,
     })
@@ -42,14 +37,6 @@ export const plans = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("plans_id_plan_type_unique").on(table.id, table.planType),
-
-    foreignKey({
-      columns: [table.parentPlanId, table.parentPlanType],
-      foreignColumns: [table.id, table.planType],
-      name: "plans_parent_plan_account_fkey",
-    }),
-
     check(
       "plans_monthly_allowance_positive",
       sql`${table.monthlyAllowance} > 0`,
@@ -59,5 +46,7 @@ export const plans = pgTable(
       "plans_max_units_per_request_positive",
       sql`${table.maxUnitsPerRequest} > 0`,
     ),
+
+    unique("plans_id_plan_type_unique").on(table.id, table.planType),
   ],
 );

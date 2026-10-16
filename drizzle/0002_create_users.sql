@@ -5,6 +5,8 @@ CREATE TABLE "users" (
 	"plan_id" uuid NOT NULL,
 	"plan_type" "plan_type" DEFAULT 'user' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "users_id_account_id_unique" UNIQUE("id","account_id"),
+	CONSTRAINT "users_account_id_name_unique" UNIQUE("account_id","name"),
 	CONSTRAINT "users_plan_type_check" CHECK ("users"."plan_type" = 'user')
 );
 --> statement-breakpoint

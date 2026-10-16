@@ -5,43 +5,36 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791996463494,
-      "tag": "0000_create_plan",
+      "when": 1792138546717,
+      "tag": "0000_create_plans",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1791996509027,
+      "when": 1792138593490,
       "tag": "0001_create_accounts",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1792004357578,
+      "when": 1792139252500,
       "tag": "0002_create_users",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1792021495259,
-      "tag": "0003_add_users_id_account_unique",
+      "when": 1792140266698,
+      "tag": "0003_create_usage",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1792026145376,
-      "tag": "0004_create_usage",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792093263303,
-      "tag": "0005_create_usage_records",
+      "when": 1792145406357,
+      "tag": "0004_create_usage_records",
       "breakpoints": true
     }
   ]
