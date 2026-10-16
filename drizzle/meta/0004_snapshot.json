@@ -1,6 +1,6 @@
 {
-  "id": "e1e0efac-6d6a-4924-bca3-8bdc3c3fc45f",
-  "prevId": "081cbb54-267d-4e70-aaeb-40bece68e03b",
+  "id": "32f95e71-1c22-453a-a49e-c230cf7a6382",
+  "prevId": "a449e87c-70c9-4e42-82a1-5175d8834696",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -128,20 +128,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parent_plan_id": {
-          "name": "parent_plan_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_plan_type": {
-          "name": "parent_plan_type",
-          "type": "plan_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'account'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -151,23 +137,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "plans_parent_plan_account_fkey": {
-          "name": "plans_parent_plan_account_fkey",
-          "tableFrom": "plans",
-          "tableTo": "plans",
-          "columnsFrom": [
-            "parent_plan_id",
-            "parent_plan_type"
-          ],
-          "columnsTo": [
-            "id",
-            "plan_type"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "plans_id_plan_type_unique": {
@@ -188,6 +158,126 @@
         "plans_max_units_per_request_positive": {
           "name": "plans_max_units_per_request_positive",
           "value": "\"plans\".\"max_units_per_request\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.usage_records": {
+      "name": "usage_records",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requested_units": {
+          "name": "requested_units",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "usage_record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "usage_records_account_request_unique": {
+          "name": "usage_records_account_request_unique",
+          "columns": [
+            {
+              "expression": "account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "usage_records_account_id_accounts_id_fk": {
+          "name": "usage_records_account_id_accounts_id_fk",
+          "tableFrom": "usage_records",
+          "tableTo": "accounts",
+          "columnsFrom": [
+            "account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "usage_records_user_account_fkey": {
+          "name": "usage_records_user_account_fkey",
+          "tableFrom": "usage_records",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id",
+            "account_id"
+          ],
+          "columnsTo": [
+            "id",
+            "account_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "usage_records_status_reason_check": {
+          "name": "usage_records_status_reason_check",
+          "value": "(\n        (\"usage_records\".\"status\" = 'accepted' AND \"usage_records\".\"rejection_reason\" IS NULL)\n        OR\n        (\"usage_records\".\"status\" = 'rejected' AND \"usage_records\".\"rejection_reason\" IS NOT NULL)\n      )"
         }
       },
       "isRLSEnabled": false
@@ -421,6 +511,14 @@
             "id",
             "account_id"
           ]
+        },
+        "users_account_id_name_unique": {
+          "name": "users_account_id_name_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "account_id",
+            "name"
+          ]
         }
       },
       "policies": {},
@@ -440,6 +538,14 @@
       "values": [
         "account",
         "user"
+      ]
+    },
+    "public.usage_record_status": {
+      "name": "usage_record_status",
+      "schema": "public",
+      "values": [
+        "accepted",
+        "rejected"
       ]
     }
   },

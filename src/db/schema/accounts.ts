@@ -6,11 +6,9 @@ import {
   check,
   foreignKey,
 } from "drizzle-orm/pg-core";
-import { planTypeEnum } from "./plans.js";
 
 import { sql } from "drizzle-orm";
-
-import { plans } from "./plans.js";
+import { plans, planTypeEnum } from "./plans.js";
 
 export const accounts = pgTable(
   "accounts",
@@ -23,7 +21,7 @@ export const accounts = pgTable(
 
     planId: uuid("plan_id").notNull(),
 
-    planType: planTypeEnum("plan_type").default("account").notNull(),
+    planType: planTypeEnum("plan_type").notNull().default("account"),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,

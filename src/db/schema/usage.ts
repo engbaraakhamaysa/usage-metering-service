@@ -27,7 +27,7 @@ export const usage = pgTable(
 
     periodStart: date("period_start").notNull(),
 
-    usedUnits: integer("used_units").default(0).notNull(),
+    usedUnits: integer("used_units").notNull().default(0),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,
@@ -42,13 +42,13 @@ export const usage = pgTable(
       .notNull(),
   },
   (table) => [
+    check("usage_used_units_non_negative", sql`${table.usedUnits} >= 0`),
+
     foreignKey({
       columns: [table.userId, table.accountId],
       foreignColumns: [users.id, users.accountId],
       name: "usage_user_account_fkey",
     }),
-
-    check("usage_used_units_non_negative", sql`${table.usedUnits} >= 0`),
 
     uniqueIndex("usage_account_period_unique")
       .on(table.accountId, table.periodStart)

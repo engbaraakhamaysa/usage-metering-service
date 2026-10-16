@@ -1,6 +1,6 @@
 {
-  "id": "da1bbcaa-b2c9-415c-b99d-4c570fc5cbee",
-  "prevId": "65f4be9d-1f90-406d-b466-f52e9463e1fa",
+  "id": "b0d88eec-e952-4d39-8815-82b6043628d2",
+  "prevId": "677a25fc-9011-48ae-b181-b5529a861aee",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -128,20 +128,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parent_plan_id": {
-          "name": "parent_plan_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_plan_type": {
-          "name": "parent_plan_type",
-          "type": "plan_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'account'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -151,23 +137,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "plans_parent_plan_account_fkey": {
-          "name": "plans_parent_plan_account_fkey",
-          "tableFrom": "plans",
-          "tableTo": "plans",
-          "columnsFrom": [
-            "parent_plan_id",
-            "parent_plan_type"
-          ],
-          "columnsTo": [
-            "id",
-            "plan_type"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "plans_id_plan_type_unique": {

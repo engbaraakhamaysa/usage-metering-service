@@ -1,12 +1,13 @@
 import {
   pgTable,
   uuid,
+  varchar,
   timestamp,
   check,
   foreignKey,
-  varchar,
   unique,
 } from "drizzle-orm/pg-core";
+
 import { sql } from "drizzle-orm";
 
 import { accounts } from "./accounts.js";
@@ -25,7 +26,7 @@ export const users = pgTable(
 
     planId: uuid("plan_id").notNull(),
 
-    planType: planTypeEnum("plan_type").default("user").notNull(),
+    planType: planTypeEnum("plan_type").notNull().default("user"),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,
@@ -43,5 +44,7 @@ export const users = pgTable(
     }),
 
     unique("users_id_account_id_unique").on(table.id, table.accountId),
+
+    unique("users_account_id_name_unique").on(table.accountId, table.name),
   ],
 );
