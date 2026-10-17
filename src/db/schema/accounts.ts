@@ -8,7 +8,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
-import { plans, planTypeEnum } from "./plans.js";
+import { plans } from "./plans.js";
+import { planTypeEnum } from "./enums.js";
 
 export const accounts = pgTable(
   "accounts",

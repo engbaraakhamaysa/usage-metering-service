@@ -4,15 +4,16 @@ import {
   varchar,
   integer,
   timestamp,
-  pgEnum,
   check,
   unique,
+  AnyPgColumn,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
+import { accounts } from "./accounts.js";
 
-// Define the types of plans
-export const planTypeEnum = pgEnum("plan_type", ["account", "user"]);
+import { planTypeEnum } from "./enums.js";
 
 // Define the plans table
 export const plans = pgTable(
@@ -28,7 +29,9 @@ export const plans = pgTable(
 
     maxUnitsPerRequest: integer("max_units_per_request").notNull(),
 
-    ownerAccountId: uuid("owner_account_id"),
+    ownerAccountId: uuid("owner_account_id").references(
+      (): AnyPgColumn => accounts.id,
+    ),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,
@@ -48,5 +51,15 @@ export const plans = pgTable(
     ),
 
     unique("plans_id_plan_type_unique").on(table.id, table.planType),
+
+    // Prevent duplicate names among global plans of the same type
+    uniqueIndex("plans_global_name_type_unique")
+      .on(table.name, table.planType)
+      .where(sql`${table.ownerAccountId} IS NULL`),
+
+    // Prevent duplicate names within the same account and plan type
+    uniqueIndex("plans_account_name_type_unique")
+      .on(table.ownerAccountId, table.name, table.planType)
+      .where(sql`${table.ownerAccountId} IS NOT NULL`),
   ],
 );

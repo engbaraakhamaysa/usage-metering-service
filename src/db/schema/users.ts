@@ -11,7 +11,8 @@ import {
 import { sql } from "drizzle-orm";
 
 import { accounts } from "./accounts.js";
-import { plans, planTypeEnum } from "./plans.js";
+import { plans } from "./plans.js";
+import { planTypeEnum } from "./enums.js";
 
 export const users = pgTable(
   "users",
