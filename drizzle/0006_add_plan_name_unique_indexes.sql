@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "plans_global_name_type_unique" ON "plans" USING btree ("name","plan_type") WHERE "plans"."owner_account_id" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "plans_account_name_type_unique" ON "plans" USING btree ("owner_account_id","name","plan_type") WHERE "plans"."owner_account_id" IS NOT NULL;

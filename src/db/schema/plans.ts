@@ -4,10 +4,10 @@ import {
   varchar,
   integer,
   timestamp,
-  pgEnum,
   check,
   unique,
   AnyPgColumn,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
@@ -51,5 +51,15 @@ export const plans = pgTable(
     ),
 
     unique("plans_id_plan_type_unique").on(table.id, table.planType),
+
+    // Prevent duplicate names among global plans of the same type
+    uniqueIndex("plans_global_name_type_unique")
+      .on(table.name, table.planType)
+      .where(sql`${table.ownerAccountId} IS NULL`),
+
+    // Prevent duplicate names within the same account and plan type
+    uniqueIndex("plans_account_name_type_unique")
+      .on(table.ownerAccountId, table.name, table.planType)
+      .where(sql`${table.ownerAccountId} IS NOT NULL`),
   ],
 );
