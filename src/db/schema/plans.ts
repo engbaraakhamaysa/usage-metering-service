@@ -7,12 +7,13 @@ import {
   pgEnum,
   check,
   unique,
+  AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
+import { accounts } from "./accounts.js";
 
-// Define the types of plans
-export const planTypeEnum = pgEnum("plan_type", ["account", "user"]);
+import { planTypeEnum } from "./enums.js";
 
 // Define the plans table
 export const plans = pgTable(
@@ -28,7 +29,9 @@ export const plans = pgTable(
 
     maxUnitsPerRequest: integer("max_units_per_request").notNull(),
 
-    ownerAccountId: uuid("owner_account_id"),
+    ownerAccountId: uuid("owner_account_id").references(
+      (): AnyPgColumn => accounts.id,
+    ),
 
     createdAt: timestamp("created_at", {
       withTimezone: true,

@@ -1,20 +1,14 @@
 import express from "express";
-import plansRouter from "./routes/plans.routes.js";
-import usersRouter from "./routes/users.routes.js";
-import usageRouter from "./routes/usage.routes.js";
-
-import accountsRouter from "./routes/accounts.routes.js";
+import apiRouter from "./routes/index.routes.js";
 
 const app = express();
 
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT;
+console.log(PORT);
 
-app.use(plansRouter);
-app.use("/api/users", usersRouter);
-app.use(accountsRouter);
-app.use("/api/usage", usageRouter);
+app.use("/api", apiRouter);
 
 // Start the HTTP server
 app.listen(PORT, () => {

@@ -36,6 +36,13 @@
       "when": 1792145406357,
       "tag": "0004_create_usage_records",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792158417971,
+      "tag": "0005_add_plan_owner_account_fk",
+      "breakpoints": true
     }
   ]
 }
