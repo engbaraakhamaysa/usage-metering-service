@@ -1,173 +1,118 @@
 import {
-  createAccountUsage,
-  createUserUsage,
-  findAccountWithPlan,
-  findUserWithPlan,
+  countUsageRecords,
+  consumeUsageTransaction,
   findAccountUsage,
+  findUsageRecordById,
+  findUsageRecords,
   findUserUsage,
-  incrementUsage,
 } from "../repositories/usage.repository.js";
 
-// Get the first day of the current month
+import type { ConsumeUsageInput } from "../validator/usage.validator.js";
+
+// ============================================================
+// Types
+// ============================================================
+
+type ConsumeUsageServiceInput = ConsumeUsageInput & {
+  accountId: string;
+};
+
+// ============================================================
+// Helpers
+// ============================================================
+
+// Get the first day of the current month in UTC.
 function getCurrentPeriodStart(): string {
   const now = new Date();
+
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
 
   return `${year}-${month}-01`;
 }
 
-// Get account usage
+// ============================================================
+// Account Usage
+// ============================================================
+
+// Get the account's usage for the current month.
 export async function getAccountUsage(accountId: string) {
-  const account = await findAccountWithPlan(accountId);
-
-  if (!account) {
-    return {
-      success: false as const,
-      status: 404,
-      message: "Account not found",
-    };
-  }
-
   const periodStart = getCurrentPeriodStart();
 
   const accountUsage = await findAccountUsage(accountId, periodStart);
 
-  const usedUnits = accountUsage?.usedUnits ?? 0;
-
   return {
-    success: true as const,
-    status: 200,
-    data: {
-      accountId,
-      periodStart,
-      usedUnits,
-      monthlyAllowance: account.monthlyAllowance,
-      remainingUnits: account.monthlyAllowance - usedUnits,
-    },
+    accountId,
+    periodStart,
+    usedUnits: accountUsage?.usedUnits ?? 0,
   };
 }
 
-// Get user usage
-export async function getUserUsage(userId: string) {
-  const user = await findUserWithPlan(userId);
+// ============================================================
+// User Usage
+// ============================================================
 
-  if (!user) {
-    return {
-      success: false as const,
-      status: 404,
-      message: "User not found",
-    };
-  }
-
+// Get a user's usage for the current month.
+export async function getUserUsage(accountId: string, userId: string) {
   const periodStart = getCurrentPeriodStart();
 
-  const userUsage = await findUserUsage(user.accountId, userId, periodStart);
-
-  const usedUnits = userUsage?.usedUnits ?? 0;
+  const userUsage = await findUserUsage(accountId, userId, periodStart);
 
   return {
-    success: true as const,
-    status: 200,
-    data: {
-      userId,
-      accountId: user.accountId,
-      periodStart,
-      usedUnits,
-      monthlyAllowance: user.monthlyAllowance,
-      remainingUnits: user.monthlyAllowance - usedUnits,
-    },
+    accountId,
+    userId,
+    periodStart,
+    usedUnits: userUsage?.usedUnits ?? 0,
   };
 }
 
-// Consume units for an account and its user
-export async function consumeUsage(
+// ============================================================
+// Consume Usage
+// ============================================================
+
+// Consume units for a user under an account.
+export async function consumeUsage(input: ConsumeUsageServiceInput) {
+  const periodStart = getCurrentPeriodStart();
+
+  return consumeUsageTransaction({
+    ...input,
+    periodStart,
+  });
+}
+
+// ============================================================
+// Usage Records
+// ============================================================
+
+// Get usage records with pagination.
+export async function getUsageRecords(
   accountId: string,
-  userId: string,
-  units: number,
+  page: number,
+  limit: number,
 ) {
-  const account = await findAccountWithPlan(accountId);
+  const offset = (page - 1) * limit;
 
-  if (!account) {
-    return {
-      success: false as const,
-      status: 404,
-      message: "Account not found",
-    };
-  }
-
-  const user = await findUserWithPlan(userId);
-
-  if (!user) {
-    return {
-      success: false as const,
-      status: 404,
-      message: "User not found",
-    };
-  }
-
-  if (user.accountId !== accountId) {
-    return {
-      success: false as const,
-      status: 400,
-      message: "User does not belong to this account",
-    };
-  }
-
-  if (units > account.maxUnitsPerRequest || units > user.maxUnitsPerRequest) {
-    return {
-      success: false as const,
-      status: 400,
-      message: "Request exceeds the per-request limit",
-    };
-  }
-
-  const periodStart = getCurrentPeriodStart();
-
-  const accountUsage = await createAccountUsage(accountId, periodStart);
-  const userUsage = await createUserUsage(accountId, userId, periodStart);
-
-  if (!accountUsage || !userUsage) {
-    return {
-      success: false as const,
-      status: 500,
-      message: "Failed to initialize usage records",
-    };
-  }
-
-  if (accountUsage.usedUnits + units > account.monthlyAllowance) {
-    return {
-      success: false as const,
-      status: 403,
-      message: "Account monthly allowance exceeded",
-    };
-  }
-
-  if (userUsage.usedUnits + units > user.monthlyAllowance) {
-    return {
-      success: false as const,
-      status: 403,
-      message: "User monthly allowance exceeded",
-    };
-  }
-
-  await incrementUsage(accountUsage.id, units);
-  await incrementUsage(userUsage.id, units);
+  const [records, total] = await Promise.all([
+    findUsageRecords(accountId, limit, offset),
+    countUsageRecords(accountId),
+  ]);
 
   return {
-    success: true as const,
-    status: 200,
-    message: "Usage consumed successfully",
-    data: {
-      accountId,
-      userId,
-      units,
-      periodStart,
-      accountUsedUnits: accountUsage.usedUnits + units,
-      accountRemainingUnits:
-        account.monthlyAllowance - accountUsage.usedUnits - units,
-      userUsedUnits: userUsage.usedUnits + units,
-      userRemainingUnits: user.monthlyAllowance - userUsage.usedUnits - units,
+    records,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     },
   };
+}
+
+// ============================================================
+// Single Usage Record
+// ============================================================
+
+// Get one usage record by ID.
+export async function getUsageRecordById(accountId: string, recordId: string) {
+  return findUsageRecordById(accountId, recordId);
 }

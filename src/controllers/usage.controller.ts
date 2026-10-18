@@ -1,103 +1,139 @@
 import type { Request, Response } from "express";
 
-import { getAccountUsage, getUserUsage } from "../services/usage.service.js";
+import {
+  consumeUsage as consumeUsageService,
+  getAccountUsage as getAccountUsageService,
+  getUserUsage as getUserUsageService,
+  getUsageRecordById as getUsageRecordByIdService,
+  getUsageRecords as getUsageRecordsService,
+} from "../services/usage.service.js";
 
-import { consumeUsageWithRecord } from "../services/usage-records.service.js";
+import type {
+  ConsumeUsageInput,
+  UserIdParams,
+  UsageRecordIdParams,
+  UsageRecordsQuery,
+} from "../validator/usage.validator.js";
 
-// GET /api/usage/account/:accountId
-export async function getAccountUsageController(
-  req: Request,
-  res: Response,
-): Promise<void> {
+// Get the account's current monthly usage.
+export async function getAccountUsage(_req: Request, res: Response) {
   try {
-    const { accountId } = req.params;
+    const accountId = res.locals.account.id;
 
-    if (typeof accountId !== "string") {
-      res.status(400).json({ error: "Invalid account ID" });
-      return;
-    }
+    const result = await getAccountUsageService(accountId);
 
-    const result = await getAccountUsage(accountId);
-
-    if (!result.success) {
-      res.status(result.status).json({ error: result.message });
-      return;
-    }
-
-    res.status(200).json(result.data);
+    return res.status(200).json(result);
   } catch (error) {
-    console.error("Failed to fetch account usage:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Failed to get account usage:", error);
+
+    return res.status(500).json({
+      error: "Failed to get account usage",
+    });
   }
 }
 
-// GET /api/usage/user/:userId
-export async function getUserUsageController(
-  req: Request,
-  res: Response,
-): Promise<void> {
+// Get a user's current monthly usage.
+export async function getUserUsage(_req: Request, res: Response) {
   try {
-    const { userId } = req.params;
+    const accountId = res.locals.account.id;
+    const { userId } = res.locals.validatedParams as UserIdParams;
 
-    if (typeof userId !== "string") {
-      res.status(400).json({ error: "Invalid user ID" });
-      return;
-    }
+    const result = await getUserUsageService(accountId, userId);
 
-    const result = await getUserUsage(userId);
-
-    if (!result.success) {
-      res.status(result.status).json({ error: result.message });
-      return;
-    }
-
-    res.status(200).json(result.data);
+    return res.status(200).json(result);
   } catch (error) {
-    console.error("Failed to fetch user usage:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Failed to get user usage:", error);
+
+    return res.status(500).json({
+      error: "Failed to get user usage",
+    });
   }
 }
 
-// POST /api/usage/consume
-export async function consumeUsageController(
-  req: Request,
-  res: Response,
-): Promise<void> {
+// Consume units for a user under the authenticated account.
+export async function consumeUsage(_req: Request, res: Response) {
   try {
-    const { accountId, userId, requestId, units } = req.body;
+    const accountId = res.locals.account.id;
+    const body = res.locals.validatedBody as ConsumeUsageInput;
 
-    // Validate request data
-    if (
-      typeof accountId !== "string" ||
-      typeof userId !== "string" ||
-      typeof requestId !== "string" ||
-      !requestId.trim() ||
-      typeof units !== "number" ||
-      !Number.isInteger(units) ||
-      units <= 0
-    ) {
-      res.status(400).json({ error: "Invalid usage data" });
-      return;
-    }
-
-    const result = await consumeUsageWithRecord(
+    const result = await consumeUsageService({
       accountId,
-      userId,
-      requestId,
-      units,
-    );
+      ...body,
+    });
 
-    if (!result.success) {
-      res.status(result.status).json({
-        error: result.message,
-        ...("data" in result ? { data: result.data } : {}),
+    return res.status(200).json({
+      ...result.record,
+      duplicate: result.duplicate,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Idempotency key reused with different request"
+    ) {
+      return res.status(409).json({
+        error: error.message,
       });
-      return;
     }
 
-    res.status(200).json(result);
-  } catch (error) {
+    if (
+      error instanceof Error &&
+      [
+        "Account not found",
+        "User not found",
+        "Account plan not found",
+      ].includes(error.message)
+    ) {
+      return res.status(404).json({
+        error: error.message,
+      });
+    }
+
     console.error("Failed to consume usage:", error);
-    res.status(500).json({ error: "Internal server error" });
+
+    return res.status(500).json({
+      error: "Failed to consume usage",
+    });
+  }
+}
+
+// Get usage records with pagination.
+export async function getUsageRecords(_req: Request, res: Response) {
+  try {
+    const accountId = res.locals.account.id;
+    const { page, limit } = res.locals.validatedQuery as UsageRecordsQuery;
+
+    const result = await getUsageRecordsService(accountId, page, limit);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Failed to get usage records:", error);
+
+    return res.status(500).json({
+      error: "Failed to get usage records",
+    });
+  }
+}
+
+// Get one usage record by ID.
+export async function getUsageRecordById(_req: Request, res: Response) {
+  try {
+    const accountId = res.locals.account.id;
+    const { id } = res.locals.validatedParams as UsageRecordIdParams;
+
+    const result = await getUsageRecordByIdService(accountId, id);
+
+    if (!result) {
+      return res.status(404).json({
+        error: "Usage record not found",
+      });
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Failed to get usage record:", error);
+
+    return res.status(500).json({
+      error: "Failed to get usage record",
+    });
   }
 }
