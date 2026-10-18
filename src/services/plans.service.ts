@@ -120,3 +120,31 @@ export async function updatePlan(
 
   return updatePrivatePlan(planId, accountId, data);
 }
+
+// Get a public user plan or a private user plan owned by the account.
+export async function getUserPlanById(planId: string, accountId?: string) {
+  // First look for a public user plan.
+  const publicPlans = await findPlans({
+    id: planId,
+    planType: "user",
+    ownerAccountId: null,
+  });
+
+  if (publicPlans[0]) {
+    return publicPlans[0];
+  }
+
+  // Without an account ID, private plans are not accessible.
+  if (!accountId) {
+    return null;
+  }
+
+  // Look for a private user plan owned by this account.
+  const privatePlans = await findPlans({
+    id: planId,
+    planType: "user",
+    ownerAccountId: accountId,
+  });
+
+  return privatePlans[0] ?? null;
+}
