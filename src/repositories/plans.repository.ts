@@ -8,20 +8,14 @@ export type FindPlansOptions = {
   ownerAccountId?: string | null;
 };
 
-// Create new plan
+// Create a new plan.
 export async function insertPlan(data: typeof plans.$inferInsert) {
-  try {
-    const result = await db.insert(plans).values(data).returning();
+  const result = await db.insert(plans).values(data).returning();
 
-    console.log("Plan created successfully:", result[0]);
-    return result[0];
-  } catch (error) {
-    console.error("Failed to create plan:", error);
-    return null;
-  }
+  return result[0];
 }
 
-// Find plans using the provided filters
+// Find plans using the provided filters.
 export async function findPlans(options: FindPlansOptions) {
   const conditions: SQL[] = [];
 
@@ -47,4 +41,24 @@ export async function findPlans(options: FindPlansOptions) {
     .select()
     .from(plans)
     .where(and(...conditions));
+}
+
+// Update a private plan owned by a specific account.
+export async function updatePrivatePlan(
+  id: string,
+  accountId: string,
+  data: Partial<
+    Pick<
+      typeof plans.$inferInsert,
+      "name" | "monthlyAllowance" | "maxUnitsPerRequest"
+    >
+  >,
+) {
+  const result = await db
+    .update(plans)
+    .set(data)
+    .where(and(eq(plans.id, id), eq(plans.ownerAccountId, accountId)))
+    .returning();
+
+  return result[0] ?? null;
 }

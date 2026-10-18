@@ -1,13 +1,17 @@
-import { insertAccount } from "../repositories/accounts.repository.js";
-import { getPublicAccountPlanById } from "./plans.service.js";
+import {
+  insertAccount,
+  updatePlanAccount,
+} from "../repositories/accounts.repository.js";
+import { getAccountPlanById } from "./plans.service.js";
 import { generateApiKey } from "../utils/api-key.js";
 import type { CreateAccountInput } from "../validator/accounts.validator.js";
 
+// Create a new account.
 export async function createAccount(data: CreateAccountInput) {
   const { name, planId } = data;
 
   // Find a public account plan by ID.
-  const plan = await getPublicAccountPlanById(planId);
+  const plan = await getAccountPlanById(planId);
 
   if (!plan) {
     throw new Error("Invalid account plan");
@@ -25,4 +29,23 @@ export async function createAccount(data: CreateAccountInput) {
     ...account,
     apiKey,
   };
+}
+
+// Change an account's plan.
+export async function updateAccountPlan(accountId: string, planId: string) {
+  // Find a public plan or a private plan owned by this account.
+  const plan = await getAccountPlanById(planId, accountId);
+
+  if (!plan) {
+    throw new Error("Invalid account plan");
+  }
+
+  // Update the account's plan.
+  const account = await updatePlanAccount(accountId, plan.id);
+
+  if (!account) {
+    throw new Error("Account not found");
+  }
+
+  return account;
 }

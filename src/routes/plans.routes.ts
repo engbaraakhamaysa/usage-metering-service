@@ -3,14 +3,20 @@ import { Router } from "express";
 import {
   getPublicUserPlansController,
   getPublicAccountPlansController,
-  getPlansByOwnerController,
+  getPlansController,
+  getPlanByIdController,
   createPrivatePlanController,
   createPublicPlanController,
+  updatePlanController,
 } from "../controllers/plans.controller.js";
+
+import { authenticateApiKey } from "../middlewares/authenticate-api-key.js";
 import { validate } from "../middlewares/validate.js";
+
 import {
   createPlanSchema,
-  accountIdParamsSchema,
+  planIdParamsSchema,
+  updatePlanSchema,
 } from "../validator/plans.validator.js";
 
 const plansRouter = Router();
@@ -21,22 +27,36 @@ plansRouter.get("/public/users", getPublicUserPlansController);
 // 2. Get public account plans.
 plansRouter.get("/public/accounts", getPublicAccountPlansController);
 
-// 3. Get plans owned by a specific account.
+// 3. Get public and private plans available to the authenticated account.
+plansRouter.get("/", authenticateApiKey, getPlansController);
+
+// 4. Get one public plan or a private plan owned by the authenticated account.
 plansRouter.get(
-  "/owner/:accountId",
-  validate(accountIdParamsSchema, "params"),
-  getPlansByOwnerController,
+  "/:id",
+  authenticateApiKey,
+  validate(planIdParamsSchema, "params"),
+  getPlanByIdController,
 );
 
-// 4. Create a private plan.
+// 5. Create a private plan owned by the authenticated account.
 plansRouter.post(
-  "/private/:accountId",
-  validate(accountIdParamsSchema, "params"),
+  "/",
+  authenticateApiKey,
   validate(createPlanSchema),
   createPrivatePlanController,
 );
 
-// 5. Create a public plan.
+// 6. Update a private plan owned by the authenticated account.
+plansRouter.patch(
+  "/:id",
+  authenticateApiKey,
+  validate(planIdParamsSchema, "params"),
+  validate(updatePlanSchema),
+  updatePlanController,
+);
+
+// 7. Create a public plan.
+// This route must be protected by an appropriate admin authorization mechanism.
 plansRouter.post(
   "/public",
   validate(createPlanSchema),

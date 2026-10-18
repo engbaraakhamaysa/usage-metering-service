@@ -3,14 +3,16 @@ import type { Request, Response } from "express";
 import {
   getPublicUserPlans,
   getPublicAccountPlans,
-  getPlansByOwner,
+  getPlansForAccount,
+  getPlanById,
   createPrivatePlan,
   createPublicPlan,
+  updatePlan,
 } from "../services/plans.service.js";
 
 import type {
   CreatePlanInput,
-  AccountIdParams,
+  UpdatePlanInput,
 } from "../validator/plans.validator.js";
 
 // GET /api/plans/public/users
@@ -49,19 +51,19 @@ export async function getPublicAccountPlansController(
   }
 }
 
-// GET /api/plans/owner/:accountId
-export async function getPlansByOwnerController(
-  req: Request<AccountIdParams>,
+// GET /api/plans
+export async function getPlansController(
+  _req: Request,
   res: Response,
 ): Promise<void> {
   try {
-    const { accountId } = req.params;
+    const accountId = res.locals.account.id;
 
-    const plans = await getPlansByOwner(accountId);
+    const plans = await getPlansForAccount(accountId);
 
     res.status(200).json(plans);
   } catch (error) {
-    console.error("Failed to fetch account plans:", error);
+    console.error("Failed to fetch available plans:", error);
 
     res.status(500).json({
       error: "Internal server error",
@@ -69,13 +71,41 @@ export async function getPlansByOwnerController(
   }
 }
 
-// POST /api/plans/private/:accountId
-export async function createPrivatePlanController(
-  req: Request<AccountIdParams, unknown, CreatePlanInput>,
+// GET /api/plans/:id
+export async function getPlanByIdController(
+  req: Request<{ id: string }>,
   res: Response,
 ): Promise<void> {
   try {
-    const { accountId } = req.params;
+    const { id } = req.params;
+    const accountId = res.locals.account.id;
+
+    const plan = await getPlanById(id, accountId);
+
+    if (!plan) {
+      res.status(404).json({
+        error: "Plan not found",
+      });
+      return;
+    }
+
+    res.status(200).json(plan);
+  } catch (error) {
+    console.error("Failed to fetch plan:", error);
+
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+}
+
+// POST /api/plans
+export async function createPrivatePlanController(
+  req: Request<Record<string, never>, unknown, CreatePlanInput>,
+  res: Response,
+): Promise<void> {
+  try {
+    const accountId = res.locals.account.id;
 
     const { name, planType, monthlyAllowance, maxUnitsPerRequest } = req.body;
 
@@ -114,6 +144,34 @@ export async function createPublicPlanController(
     res.status(201).json(plan);
   } catch (error) {
     console.error("Failed to create public plan:", error);
+
+    res.status(500).json({
+      error: "Internal server error",
+    });
+  }
+}
+
+// PATCH /api/plans/:id
+export async function updatePlanController(
+  req: Request<{ id: string }, unknown, UpdatePlanInput>,
+  res: Response,
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const accountId = res.locals.account.id;
+
+    const plan = await updatePlan(id, accountId, req.body);
+
+    if (!plan) {
+      res.status(404).json({
+        error: "Plan not found",
+      });
+      return;
+    }
+
+    res.status(200).json(plan);
+  } catch (error) {
+    console.error("Failed to update plan:", error);
 
     res.status(500).json({
       error: "Internal server error",

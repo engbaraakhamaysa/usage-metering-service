@@ -3,6 +3,11 @@ import { createAccountController } from "../controllers/accounts.controller.js";
 import { validate } from "../middlewares/validate.js";
 import { createAccountSchema } from "../validator/accounts.validator.js";
 
+import { updateAccountPlanController } from "../controllers/accounts.controller.js";
+import { updateAccountPlanSchema } from "../validator/accounts.validator.js";
+
+import { authenticateApiKey } from "../middlewares/authenticate-api-key.js";
+
 const accountsRouter = Router();
 
 accountsRouter.post(
@@ -11,15 +16,11 @@ accountsRouter.post(
   createAccountController,
 );
 
-// // GET /api/accounts - Get all accounts
-// accountsRouter.get("/api/accounts", getAllAccountsController);
-
-// // POST /api/accounts - Create a new account
-// accountsRouter.post("/api/accounts", createAccountController);
-
-// //Test
-// accountsRouter.get("/", (req, res) => {
-//   return res.send("Hello");
-// });
+accountsRouter.patch(
+  "/me/plan",
+  authenticateApiKey,
+  validate(updateAccountPlanSchema),
+  updateAccountPlanController,
+);
 
 export default accountsRouter;
