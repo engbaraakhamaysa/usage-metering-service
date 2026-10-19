@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { createHash } from "node:crypto";
 
 import type { accounts } from "../db/schema/accounts.js";
-import { findAccountByApiKeyHash } from "../repositories/accounts.repository.js";
+import { findAccountByApiKeyHash } from "../modules/accounts/accounts.repository.js";
 
 ///////////////////////////////////////////////////////
 // Define shared Express response locals
