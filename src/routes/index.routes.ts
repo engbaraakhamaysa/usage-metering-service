@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import plansRouter from "../modules/plans/plans.routes.js";
-import usersRouter from "./users.routes.js";
+import usersRouter from "../modules/users/users.routes.js";
 import usageRouter from "./usage.routes.js";
 import accountsRouter from "./accounts.routes.js";
 
