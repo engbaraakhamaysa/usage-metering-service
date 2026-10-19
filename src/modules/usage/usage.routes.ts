@@ -6,17 +6,17 @@ import {
   getUserUsage,
   getUsageRecords,
   getUsageRecordById,
-} from "../controllers/usage.controller.js";
+} from "./usage.controller.js";
 
-import { authenticateApiKey } from "../middlewares/authenticate-api-key.js";
-import { validate } from "../middlewares/validate.js";
+import { authenticateApiKey } from "../../middlewares/authenticate-api-key.js";
+import { validate } from "../../middlewares/validate.js";
 
 import {
   consumeUsageSchema,
   userIdParamsSchema,
   usageRecordIdParamsSchema,
   usageRecordsQuerySchema,
-} from "../validator/usage.validator.js";
+} from "./usage.validator.js";
 
 const router = Router();
 
