@@ -6,7 +6,7 @@ import {
   updateUser as updateUserRepository,
 } from "../repositories/users.repository.js";
 
-import { getUserPlanById } from "./plans.service.js";
+import { getPlanById } from "./plans.service.js";
 
 import type {
   CreateUserInput,
@@ -18,8 +18,7 @@ export async function createUser(accountId: string, data: CreateUserInput) {
   const { name, planId } = data;
 
   // Find a public user plan or a private user plan owned by this account.
-  const plan = await getUserPlanById(planId, accountId);
-
+  const plan = await getPlanById(planId, "user", accountId);
   if (!plan) {
     throw new Error("Invalid user plan");
   }
@@ -54,7 +53,7 @@ export async function updateUserPlan(
   }
 
   // Find a public user plan or a private user plan owned by this account.
-  const plan = await getUserPlanById(planId, accountId);
+  const plan = await getPlanById(planId, "user", accountId);
 
   if (!plan) {
     throw new Error("Invalid user plan");

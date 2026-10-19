@@ -2,7 +2,7 @@ import {
   insertAccount,
   updatePlanAccount,
 } from "../repositories/accounts.repository.js";
-import { getAccountPlanById } from "./plans.service.js";
+import { getPlanById } from "./plans.service.js";
 import { generateApiKey } from "../utils/api-key.js";
 import type { CreateAccountInput } from "../validator/accounts.validator.js";
 
@@ -11,7 +11,7 @@ export async function createAccount(data: CreateAccountInput) {
   const { name, planId } = data;
 
   // Find a public account plan by ID.
-  const plan = await getAccountPlanById(planId);
+  const plan = await getPlanById(planId, "account");
 
   if (!plan) {
     throw new Error("Invalid account plan");
@@ -34,7 +34,7 @@ export async function createAccount(data: CreateAccountInput) {
 // Change an account's plan.
 export async function updateAccountPlan(accountId: string, planId: string) {
   // Find a public plan or a private plan owned by this account.
-  const plan = await getAccountPlanById(planId, accountId);
+  const plan = await getPlanById(planId, "account", accountId);
 
   if (!plan) {
     throw new Error("Invalid account plan");
