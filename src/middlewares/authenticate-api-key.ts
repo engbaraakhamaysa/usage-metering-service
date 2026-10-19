@@ -1,8 +1,23 @@
 import type { Request, Response, NextFunction } from "express";
 import { createHash } from "node:crypto";
-import { findAccountByApiKeyHash } from "../repositories/accounts.repository.js";
 
-// Authenticate requests using an API key.
+import type { accounts } from "../db/schema/accounts.js";
+import { findAccountByApiKeyHash } from "../modules/accounts/accounts.repository.js";
+
+///////////////////////////////////////////////////////
+// Define shared Express response locals
+///////////////////////////////////////////////////////
+declare global {
+  namespace Express {
+    interface Locals {
+      account?: typeof accounts.$inferSelect;
+    }
+  }
+}
+
+///////////////////////////////////////////////////////
+// Authenticate requests using an API key
+///////////////////////////////////////////////////////
 export async function authenticateApiKey(
   req: Request,
   res: Response,
@@ -11,7 +26,9 @@ export async function authenticateApiKey(
   const apiKey = req.header("x-api-key");
 
   if (!apiKey) {
-    res.status(401).json({ message: "API key is required" });
+    res.status(401).json({
+      message: "API key is required",
+    });
     return;
   }
 
@@ -21,15 +38,18 @@ export async function authenticateApiKey(
     const account = await findAccountByApiKeyHash(apiKeyHash);
 
     if (!account) {
-      res.status(401).json({ message: "Invalid API key" });
+      res.status(401).json({
+        message: "Invalid API key",
+      });
       return;
     }
 
-    // The authenticated account will be attached to the request.
     res.locals.account = account;
 
     next();
   } catch {
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({
+      message: "Internal server error",
+    });
   }
 }
