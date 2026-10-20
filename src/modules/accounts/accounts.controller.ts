@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 
+import type { AuthenticatedLocals } from "../../middlewares/authenticate-api-key.js";
+
 import { createAccount, updateAccountPlan } from "./accounts.service.js";
 
 import type {
@@ -14,7 +16,7 @@ type CreateAccountLocals = {
   validatedBody: CreateAccountInput;
 };
 
-type UpdateAccountPlanLocals = {
+type UpdateAccountPlanLocals = AuthenticatedLocals & {
   validatedBody: UpdateAccountPlanInput;
 };
 
@@ -55,18 +57,10 @@ export async function updateAccountPlanController(
   res: Response<unknown, UpdateAccountPlanLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { planId } = res.locals.validatedBody;
 
-    const updatedAccount = await updateAccountPlan(account.id, planId);
+    const updatedAccount = await updateAccountPlan(accountId, planId);
 
     res.status(200).json(updatedAccount);
   } catch (error) {

@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
   getPlansController,
+  getAccountPlansController,
   createPrivatePlanController,
   updatePlanController,
 } from "./plans.controller.js";
@@ -25,6 +26,16 @@ plansRouter.get(
   "/",
   validate(getPlansQuerySchema, "query"),
   getPlansController,
+);
+
+///////////////////////////////////////////////////////
+// Get plans available to the authenticated account
+///////////////////////////////////////////////////////
+plansRouter.get(
+  "/me",
+  authenticateApiKey,
+  validate(getPlansQuerySchema, "query"),
+  getAccountPlansController,
 );
 
 ///////////////////////////////////////////////////////

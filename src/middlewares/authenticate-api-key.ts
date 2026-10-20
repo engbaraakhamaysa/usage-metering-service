@@ -5,22 +5,18 @@ import type { accounts } from "../db/schema/accounts.js";
 import { findAccountByApiKeyHash } from "../modules/accounts/accounts.repository.js";
 
 ///////////////////////////////////////////////////////
-// Define shared Express response locals
+// Define locals for authenticated controllers
 ///////////////////////////////////////////////////////
-declare global {
-  namespace Express {
-    interface Locals {
-      account?: typeof accounts.$inferSelect;
-    }
-  }
-}
+export type AuthenticatedLocals = {
+  account: typeof accounts.$inferSelect;
+};
 
 ///////////////////////////////////////////////////////
 // Authenticate requests using an API key
 ///////////////////////////////////////////////////////
 export async function authenticateApiKey(
   req: Request,
-  res: Response,
+  res: Response<unknown, Partial<AuthenticatedLocals>>,
   next: NextFunction,
 ): Promise<void> {
   const apiKey = req.header("x-api-key");
