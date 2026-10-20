@@ -1,6 +1,6 @@
 import { and, eq, isNull, type SQL } from "drizzle-orm";
 
-import { db } from "../../db/client.js";
+import { db } from "../../db/connection.js";
 import { plans } from "../../db/schema/plans.js";
 
 type Plan = typeof plans.$inferSelect;

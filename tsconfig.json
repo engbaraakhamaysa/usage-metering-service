@@ -3,13 +3,14 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node", "jasmine"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "include": ["src/**/*.ts", "spec/**/*.ts", "drizzle.config.ts"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import { db } from "../../db/client.js";
+import { db } from "../../db/connection.js";
 import { accounts } from "../../db/schema/accounts.js";
 
 type Account = typeof accounts.$inferSelect;

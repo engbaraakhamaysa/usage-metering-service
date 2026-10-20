@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import { db } from "../../db/client.js";
+import { db } from "../../db/connection.js";
 import { users } from "../../db/schema/users.js";
 
 type User = typeof users.$inferSelect;

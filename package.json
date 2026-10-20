@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "test": "jasmine",
-    "start": "node dist/server.js",
+    "test": "npm run build && NODE_ENV=test jasmine",
+    "db:seed": "tsx src/db/seed.ts",
+    "start": "node dist/src/server.js",
+    "db:seed:test": "NODE_ENV=test tsx src/db/seed.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
