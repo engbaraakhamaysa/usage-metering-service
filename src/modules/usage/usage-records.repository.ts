@@ -1,6 +1,6 @@
 import { and, eq, desc, count } from "drizzle-orm";
 
-import { db } from "../../db/client.js";
+import { db } from "../../db/connection.js";
 import { usageRecords } from "../../db/schema/usage-records.js";
 
 export type UsageRecord = typeof usageRecords.$inferSelect;

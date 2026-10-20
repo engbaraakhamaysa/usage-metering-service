@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 
+import type { AuthenticatedLocals } from "../../middlewares/authenticate-api-key.js";
+
 import {
   createUser,
   getUsers,
@@ -14,17 +16,17 @@ import type {
 } from "./users.validator.js";
 
 ///////////////////////////////////////////////////////
-// Define validated controller locals
+// Define authenticated and validated controller locals
 ///////////////////////////////////////////////////////
-type CreateUserLocals = {
+type CreateUserLocals = AuthenticatedLocals & {
   validatedBody: CreateUserInput;
 };
 
-type GetUserLocals = {
+type GetUserLocals = AuthenticatedLocals & {
   validatedParams: UserIdParams;
 };
 
-type UpdateUserPlanLocals = {
+type UpdateUserPlanLocals = AuthenticatedLocals & {
   validatedParams: UserIdParams;
   validatedBody: UpdateUserPlanInput;
 };
@@ -37,17 +39,10 @@ export async function createUserController(
   res: Response<unknown, CreateUserLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const data = res.locals.validatedBody;
-    const user = await createUser(account.id, data);
+
+    const user = await createUser(accountId, data);
 
     res.status(201).json(user);
   } catch (error) {
@@ -71,19 +66,12 @@ export async function createUserController(
 ///////////////////////////////////////////////////////
 export async function getUsersController(
   _req: Request,
-  res: Response,
+  res: Response<unknown, AuthenticatedLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
+    const accountId = res.locals.account.id;
 
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
-    const users = await getUsers(account.id);
+    const users = await getUsers(accountId);
 
     res.status(200).json(users);
   } catch (error) {
@@ -103,17 +91,10 @@ export async function getUserController(
   res: Response<unknown, GetUserLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { id } = res.locals.validatedParams;
-    const user = await getUser(id, account.id);
+
+    const user = await getUser(id, accountId);
 
     if (!user) {
       res.status(404).json({
@@ -140,19 +121,11 @@ export async function updateUserPlanController(
   res: Response<unknown, UpdateUserPlanLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { id } = res.locals.validatedParams;
     const { planId } = res.locals.validatedBody;
 
-    const user = await updateUserPlan(id, account.id, planId);
+    const user = await updateUserPlan(id, accountId, planId);
 
     res.status(200).json(user);
   } catch (error) {

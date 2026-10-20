@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { db } from "../../db/client.js";
+import { db } from "../../db/connection.js";
 import { accounts } from "../../db/schema/accounts.js";
 import { users } from "../../db/schema/users.js";
 import { plans } from "../../db/schema/plans.js";

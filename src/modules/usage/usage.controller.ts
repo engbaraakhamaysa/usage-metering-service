@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 
+import type { AuthenticatedLocals } from "../../middlewares/authenticate-api-key.js";
+
 import {
   consumeUsage as consumeUsageService,
   getAccountUsage as getAccountUsageService,
@@ -16,21 +18,21 @@ import type {
 } from "./usage.validator.js";
 
 ///////////////////////////////////////////////////////
-// Define validated controller locals
+// Define authenticated and validated controller locals
 ///////////////////////////////////////////////////////
-type ConsumeUsageLocals = {
+type ConsumeUsageLocals = AuthenticatedLocals & {
   validatedBody: ConsumeUsageInput;
 };
 
-type GetUserUsageLocals = {
+type GetUserUsageLocals = AuthenticatedLocals & {
   validatedParams: UserIdParams;
 };
 
-type GetUsageRecordsLocals = {
+type GetUsageRecordsLocals = AuthenticatedLocals & {
   validatedQuery: UsageRecordsQuery;
 };
 
-type GetUsageRecordLocals = {
+type GetUsageRecordLocals = AuthenticatedLocals & {
   validatedParams: UsageRecordIdParams;
 };
 
@@ -39,19 +41,12 @@ type GetUsageRecordLocals = {
 ///////////////////////////////////////////////////////
 export async function getAccountUsage(
   _req: Request,
-  res: Response,
+  res: Response<unknown, AuthenticatedLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
+    const accountId = res.locals.account.id;
 
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
-    const result = await getAccountUsageService(account.id);
+    const result = await getAccountUsageService(accountId);
 
     res.status(200).json(result);
   } catch (error) {
@@ -71,18 +66,10 @@ export async function getUserUsage(
   res: Response<unknown, GetUserUsageLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { userId } = res.locals.validatedParams;
 
-    const result = await getUserUsageService(account.id, userId);
+    const result = await getUserUsageService(accountId, userId);
 
     res.status(200).json(result);
   } catch (error) {
@@ -109,20 +96,12 @@ export async function consumeUsage(
   res: Response<unknown, ConsumeUsageLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const body = res.locals.validatedBody;
 
     const result = await consumeUsageService({
       ...body,
-      accountId: account.id,
+      accountId,
     });
 
     res.status(200).json({
@@ -168,18 +147,10 @@ export async function getUsageRecords(
   res: Response<unknown, GetUsageRecordsLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { page, limit } = res.locals.validatedQuery;
 
-    const result = await getUsageRecordsService(account.id, page, limit);
+    const result = await getUsageRecordsService(accountId, page, limit);
 
     res.status(200).json(result);
   } catch (error) {
@@ -199,18 +170,10 @@ export async function getUsageRecordById(
   res: Response<unknown, GetUsageRecordLocals>,
 ): Promise<void> {
   try {
-    const account = res.locals.account;
-
-    if (!account) {
-      res.status(401).json({
-        message: "Authentication required",
-      });
-      return;
-    }
-
+    const accountId = res.locals.account.id;
     const { id } = res.locals.validatedParams;
 
-    const result = await getUsageRecordByIdService(account.id, id);
+    const result = await getUsageRecordByIdService(accountId, id);
 
     if (!result) {
       res.status(404).json({
