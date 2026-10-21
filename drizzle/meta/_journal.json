@@ -50,6 +50,20 @@
       "when": 1792261024403,
       "tag": "0006_add_plan_name_unique_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792556894777,
+      "tag": "0007_add_usage_records_history_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792558555909,
+      "tag": "0008_add_usage_integrity_checks",
+      "breakpoints": true
     }
   ]
 }

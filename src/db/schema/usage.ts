@@ -57,5 +57,10 @@ export const usage = pgTable(
     uniqueIndex("usage_user_period_unique")
       .on(table.accountId, table.userId, table.periodStart)
       .where(sql`${table.userId} IS NOT NULL`),
+
+    check(
+      "usage_period_start_first_day",
+      sql`EXTRACT(DAY FROM ${table.periodStart}) = 1`,
+    ),
   ],
 );

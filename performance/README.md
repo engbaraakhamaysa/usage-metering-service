@@ -273,6 +273,102 @@ the twelve completed runs in the results table.
 Idempotency, rejection, and read performance scenarios were measured in
 the initial round. They were not repeated in the current round.
 
+## History Index Evaluation — 2026-10-21
+
+### Change
+
+Added a B-tree index on:
+
+```sql
+(account_id, created_at DESC NULLS LAST, id DESC NULLS LAST)
+```
+
+The history query was updated to use the same explicit ordering:
+
+```sql
+ORDER BY created_at DESC NULLS LAST, id DESC NULLS LAST
+```
+
+Both ordering columns are NOT NULL, so this preserves the returned order.
+
+### History Query Measurement
+
+The table contained 81,931 records, including 15,602 records belonging
+to the selected account. No records were added between these query
+measurements.
+
+The query selected the account's newest ten records with OFFSET 0.
+Measurements used EXPLAIN (ANALYZE, BUFFERS).
+
+| Configuration                | Execution time | Plan                               | Shared buffer hits | Shared buffer reads |
+| ---------------------------- | -------------: | ---------------------------------- | -----------------: | ------------------: |
+| Before index, measurement 1  |       5.027 ms | Sequential scan and top-N sort     |              1,099 |                   0 |
+| Before index, measurement 2  |       7.292 ms | Sequential scan and top-N sort     |              1,105 |                   0 |
+| Index with original ordering |       5.803 ms | Bitmap heap scan and top-N sort    |                958 |                 114 |
+| Index with matching ordering |       0.039 ms | Index scan without a separate sort |                  4 |                   0 |
+
+The original query used DESC, whose default NULL ordering differed
+from the generated index definition. Explicit NULLS LAST allowed the
+measured query to use the index directly for ordering.
+
+The matching index scan returned ten rows without scanning and sorting
+all matching account records.
+
+These are database execution times, excluding planning time and HTTP
+processing. The 0.039 ms result is a single measurement, not an average
+or a demonstrated API latency improvement.
+
+The history endpoint also performs a separate COUNT query. Its cost
+was not included in this query measurement. Deep pagination was not
+measured.
+
+### Consumption Performance Before and After the Index
+
+Each run used ten accounts, one user per account, and ten virtual users
+for 60 seconds.
+
+| Index state | Run | HTTP requests | Requests/s |  Average |      p95 |
+| ----------- | --: | ------------: | ---------: | -------: | -------: |
+| Before      |   1 |        23,426 |     390.36 | 25.41 ms | 33.55 ms |
+| Before      |   2 |        25,539 |     425.50 | 23.31 ms | 29.64 ms |
+| Before      |   3 |        24,746 |     412.30 | 24.06 ms | 30.41 ms |
+| After       |   1 |        23,781 |     396.25 | 25.03 ms | 31.71 ms |
+| After       |   2 |        26,241 |     437.23 | 22.69 ms | 27.23 ms |
+| After       |   3 |        26,449 |     440.04 | 22.54 ms | 26.59 ms |
+
+All six runs passed all response checks, had zero HTTP failures,
+and completed without interrupted iterations.
+
+Database verification passed after every run. Final cumulative totals
+for this preparation were:
+
+- Account usage: 158,402 units
+- User usage: 158,402 units
+- Accepted units: 158,402
+- Accepted records: 158,402
+- Total records: 158,402
+
+These totals include 8,220 records generated before the six consumption
+runs.
+
+### Interpretation and Limitations
+
+The index and matching query ordering substantially reduced the work
+required for the measured first-page history query.
+
+No clear consumption slowdown was observed in these runs. This does
+not mean index maintenance has zero write cost, or that the index
+caused the higher consumption throughput observed afterward.
+
+The table grew during consumption measurements: before-index runs
+ended at 81,931 records, and after-index runs ended at 158,402 records.
+The server was restarted before after-index measurements. Run order,
+cache state, and local resource conditions were not controlled.
+
+The index was retained because it supports the history access pattern
+and showed a clear query-plan benefit without an observed consumption
+regression in this evaluation.
+
 ## Verification Scope
 
 `npm run perf:verify` checks that each performance account's usage counter
