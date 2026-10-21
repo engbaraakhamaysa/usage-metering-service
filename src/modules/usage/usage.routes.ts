@@ -15,39 +15,57 @@ import {
   consumeUsageSchema,
   userIdParamsSchema,
   usageRecordIdParamsSchema,
+  usageQuerySchema,
   usageRecordsQuerySchema,
 } from "./usage.validator.js";
 
-const router = Router();
+const usageRouter = Router();
 
-// Authenticate all usage routes.
-router.use(authenticateApiKey);
+///////////////////////////////////////////////////////
+// Authenticate all usage routes
+///////////////////////////////////////////////////////
+usageRouter.use(authenticateApiKey);
 
-// POST /api/usage/consume
-router.post("/consume", validate(consumeUsageSchema, "body"), consumeUsage);
+///////////////////////////////////////////////////////
+// Consume units for a user
+///////////////////////////////////////////////////////
+usageRouter.post("/consume", validate(consumeUsageSchema), consumeUsage);
 
-// GET /api/usage/account
-router.get("/account", getAccountUsage);
+///////////////////////////////////////////////////////
+// Get account usage for the selected or current month
+///////////////////////////////////////////////////////
+usageRouter.get(
+  "/account",
+  validate(usageQuerySchema, "query"),
+  getAccountUsage,
+);
 
-// GET /api/usage/users/:userId
-router.get(
+///////////////////////////////////////////////////////
+// Get user usage for the selected or current month
+///////////////////////////////////////////////////////
+usageRouter.get(
   "/users/:userId",
   validate(userIdParamsSchema, "params"),
+  validate(usageQuerySchema, "query"),
   getUserUsage,
 );
 
-// GET /api/usage/records
-router.get(
+///////////////////////////////////////////////////////
+// Get usage records with pagination
+///////////////////////////////////////////////////////
+usageRouter.get(
   "/records",
   validate(usageRecordsQuerySchema, "query"),
   getUsageRecords,
 );
 
-// GET /api/usage/records/:id
-router.get(
+///////////////////////////////////////////////////////
+// Get one usage record by ID
+///////////////////////////////////////////////////////
+usageRouter.get(
   "/records/:id",
   validate(usageRecordIdParamsSchema, "params"),
   getUsageRecordById,
 );
 
-export default router;
+export default usageRouter;

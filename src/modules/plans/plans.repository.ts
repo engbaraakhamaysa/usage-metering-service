@@ -1,4 +1,5 @@
 import { and, eq, isNull, type SQL } from "drizzle-orm";
+import { accounts } from "../../db/schema/accounts.js";
 
 import { db } from "../../db/connection.js";
 import { plans } from "../../db/schema/plans.js";
@@ -60,18 +61,32 @@ export async function findPlans(options: FindPlansOptions): Promise<Plan[]> {
 }
 
 ///////////////////////////////////////////////////////
-// Update a private plan owned by a specific account
+// Update a private plan after locking its owner account
 ///////////////////////////////////////////////////////
 export async function updatePrivatePlan(
   id: string,
   accountId: string,
   data: UpdatePlanData,
 ): Promise<Plan | null> {
-  const result = await db
-    .update(plans)
-    .set(data)
-    .where(and(eq(plans.id, id), eq(plans.ownerAccountId, accountId)))
-    .returning();
+  return db.transaction(async (tx) => {
+    const lockedAccounts = await tx
+      .select({
+        id: accounts.id,
+      })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .for("update");
 
-  return result[0] ?? null;
+    if (!lockedAccounts[0]) {
+      return null;
+    }
+
+    const result = await tx
+      .update(plans)
+      .set(data)
+      .where(and(eq(plans.id, id), eq(plans.ownerAccountId, accountId)))
+      .returning();
+
+    return result[0] ?? null;
+  });
 }

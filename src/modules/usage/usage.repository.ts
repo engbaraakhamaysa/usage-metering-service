@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { accounts } from "../../db/schema/accounts.js";
@@ -12,14 +12,27 @@ import type { UsageRecord } from "./usage-records.repository.js";
 ///////////////////////////////////////////////////////
 // Define usage and consumption types
 ///////////////////////////////////////////////////////
-type Usage = typeof usage.$inferSelect;
+type Plan = typeof plans.$inferSelect;
+
+type CurrentPlan = Pick<
+  Plan,
+  "id" | "name" | "monthlyAllowance" | "maxUnitsPerRequest"
+>;
+
+export type AccountUsageDetails = {
+  accountId: string;
+  usedUnits: number;
+  currentPlan: CurrentPlan;
+};
+
+export type UserUsageDetails = AccountUsageDetails & {
+  userId: string;
+};
 
 export type ConsumeUsageTransactionInput = Pick<
   UsageRecord,
   "accountId" | "userId" | "requestId" | "requestedUnits"
-> & {
-  periodStart: Usage["periodStart"];
-};
+>;
 
 export type UsageRejectionReason =
   | "account_request_limit"
@@ -33,44 +46,79 @@ export type ConsumeUsageResult = {
 };
 
 ///////////////////////////////////////////////////////
-// Find account usage for a specific month
+// Find account usage with its current plan
 ///////////////////////////////////////////////////////
 export async function findAccountUsage(
   accountId: string,
   periodStart: string,
-): Promise<Usage | null> {
+): Promise<AccountUsageDetails | null> {
   const result = await db
-    .select()
-    .from(usage)
-    .where(
+    .select({
+      accountId: accounts.id,
+      usedUnits: sql<number>`
+        COALESCE(${usage.usedUnits}, 0)
+      `.mapWith(Number),
+      currentPlan: {
+        id: plans.id,
+        name: plans.name,
+        monthlyAllowance: plans.monthlyAllowance,
+        maxUnitsPerRequest: plans.maxUnitsPerRequest,
+      },
+    })
+    .from(accounts)
+    .innerJoin(
+      plans,
+      and(eq(accounts.planId, plans.id), eq(accounts.planType, plans.planType)),
+    )
+    .leftJoin(
+      usage,
       and(
-        eq(usage.accountId, accountId),
+        eq(usage.accountId, accounts.id),
         isNull(usage.userId),
         eq(usage.periodStart, periodStart),
       ),
-    );
+    )
+    .where(eq(accounts.id, accountId));
 
   return result[0] ?? null;
 }
 
 ///////////////////////////////////////////////////////
-// Find user usage for a specific month
+// Find user usage with its current plan within an account
 ///////////////////////////////////////////////////////
 export async function findUserUsage(
   accountId: string,
   userId: string,
   periodStart: string,
-): Promise<Usage | null> {
+): Promise<UserUsageDetails | null> {
   const result = await db
-    .select()
-    .from(usage)
-    .where(
+    .select({
+      accountId: users.accountId,
+      userId: users.id,
+      usedUnits: sql<number>`
+        COALESCE(${usage.usedUnits}, 0)
+      `.mapWith(Number),
+      currentPlan: {
+        id: plans.id,
+        name: plans.name,
+        monthlyAllowance: plans.monthlyAllowance,
+        maxUnitsPerRequest: plans.maxUnitsPerRequest,
+      },
+    })
+    .from(users)
+    .innerJoin(
+      plans,
+      and(eq(users.planId, plans.id), eq(users.planType, plans.planType)),
+    )
+    .leftJoin(
+      usage,
       and(
-        eq(usage.accountId, accountId),
-        eq(usage.userId, userId),
+        eq(usage.accountId, users.accountId),
+        eq(usage.userId, users.id),
         eq(usage.periodStart, periodStart),
       ),
-    );
+    )
+    .where(and(eq(users.id, userId), eq(users.accountId, accountId)));
 
   return result[0] ?? null;
 }
@@ -81,7 +129,7 @@ export async function findUserUsage(
 export async function consumeUsageTransaction(
   input: ConsumeUsageTransactionInput,
 ): Promise<ConsumeUsageResult> {
-  const { accountId, userId, requestId, requestedUnits, periodStart } = input;
+  const { accountId, userId, requestId, requestedUnits } = input;
 
   return db.transaction(async (tx): Promise<ConsumeUsageResult> => {
     ///////////////////////////////////////////////////////
@@ -129,6 +177,12 @@ export async function consumeUsageTransaction(
     }
 
     ///////////////////////////////////////////////////////
+    // Capture processing time after acquiring the account lock
+    ///////////////////////////////////////////////////////
+    const processedAt = new Date();
+    const periodStart = `${processedAt.toISOString().slice(0, 7)}-01`;
+
+    ///////////////////////////////////////////////////////
     // Read the account's current plan limits
     ///////////////////////////////////////////////////////
     const accountPlans = await tx
@@ -174,32 +228,25 @@ export async function consumeUsageTransaction(
     }
 
     ///////////////////////////////////////////////////////
-    // Read account and user usage for the current period
+    // Read account and user usage for the processing month
     ///////////////////////////////////////////////////////
-    const accountUsageRows = await tx
-      .select()
+    const usageRows = await tx
+      .select({
+        id: usage.id,
+        userId: usage.userId,
+        usedUnits: usage.usedUnits,
+      })
       .from(usage)
       .where(
         and(
           eq(usage.accountId, accountId),
-          isNull(usage.userId),
           eq(usage.periodStart, periodStart),
+          or(isNull(usage.userId), eq(usage.userId, userId)),
         ),
       );
 
-    const userUsageRows = await tx
-      .select()
-      .from(usage)
-      .where(
-        and(
-          eq(usage.accountId, accountId),
-          eq(usage.userId, userId),
-          eq(usage.periodStart, periodStart),
-        ),
-      );
-
-    const accountUsage = accountUsageRows[0];
-    const userUsage = userUsageRows[0];
+    const accountUsage = usageRows.find((row) => row.userId === null);
+    const userUsage = usageRows.find((row) => row.userId === userId);
 
     const accountUsedUnits = accountUsage?.usedUnits ?? 0;
     const userUsedUnits = userUsage?.usedUnits ?? 0;
@@ -235,6 +282,7 @@ export async function consumeUsageTransaction(
           requestedUnits,
           status: "rejected",
           rejectionReason,
+          createdAt: processedAt,
         })
         .returning();
 
@@ -258,7 +306,7 @@ export async function consumeUsageTransaction(
         .update(usage)
         .set({
           usedUnits: sql`${usage.usedUnits} + ${requestedUnits}`,
-          updatedAt: new Date(),
+          updatedAt: processedAt,
         })
         .where(eq(usage.id, accountUsage.id));
     } else {
@@ -267,6 +315,8 @@ export async function consumeUsageTransaction(
         userId: null,
         periodStart,
         usedUnits: requestedUnits,
+        createdAt: processedAt,
+        updatedAt: processedAt,
       });
     }
 
@@ -278,7 +328,7 @@ export async function consumeUsageTransaction(
         .update(usage)
         .set({
           usedUnits: sql`${usage.usedUnits} + ${requestedUnits}`,
-          updatedAt: new Date(),
+          updatedAt: processedAt,
         })
         .where(eq(usage.id, userUsage.id));
     } else {
@@ -287,6 +337,8 @@ export async function consumeUsageTransaction(
         userId,
         periodStart,
         usedUnits: requestedUnits,
+        createdAt: processedAt,
+        updatedAt: processedAt,
       });
     }
 
@@ -302,6 +354,7 @@ export async function consumeUsageTransaction(
         requestedUnits,
         status: "accepted",
         rejectionReason: null,
+        createdAt: processedAt,
       })
       .returning();
 

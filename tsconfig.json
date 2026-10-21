@@ -11,6 +11,11 @@
     "skipLibCheck": true,
     "types": ["node", "jasmine"]
   },
-  "include": ["src/**/*.ts", "spec/**/*.ts", "drizzle.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "spec/**/*.ts",
+    "performance/**/*.ts",
+    "drizzle.config.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

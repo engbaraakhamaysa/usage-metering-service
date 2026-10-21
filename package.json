@@ -12,7 +12,10 @@
     "db:seed:test": "NODE_ENV=test tsx src/db/seed.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "perf:prepare": "NODE_ENV=test tsx performance/prepare.ts",
+    "perf:verify": "NODE_ENV=test tsx performance/verify.ts",
+    "perf:cleanup": "NODE_ENV=test tsx performance/cleanup.ts"
   },
   "keywords": [],
   "author": "",
