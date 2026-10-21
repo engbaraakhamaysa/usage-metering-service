@@ -121,15 +121,13 @@ export async function getUserUsage(
 ///////////////////////////////////////////////////////
 // Consume units for a user under a specific account
 ///////////////////////////////////////////////////////
+///////////////////////////////////////////////////////
+// Consume units for a user under a specific account
+///////////////////////////////////////////////////////
 export async function consumeUsage(
   input: ConsumeUsageServiceInput,
 ): Promise<ConsumeUsageResult> {
-  const periodStart = getCurrentPeriodStart();
-
-  return consumeUsageTransaction({
-    ...input,
-    periodStart,
-  });
+  return consumeUsageTransaction(input);
 }
 
 ///////////////////////////////////////////////////////

@@ -12,8 +12,6 @@ import type { UsageRecord } from "./usage-records.repository.js";
 ///////////////////////////////////////////////////////
 // Define usage and consumption types
 ///////////////////////////////////////////////////////
-type Usage = typeof usage.$inferSelect;
-
 type Plan = typeof plans.$inferSelect;
 
 type CurrentPlan = Pick<
@@ -34,9 +32,7 @@ export type UserUsageDetails = AccountUsageDetails & {
 export type ConsumeUsageTransactionInput = Pick<
   UsageRecord,
   "accountId" | "userId" | "requestId" | "requestedUnits"
-> & {
-  periodStart: Usage["periodStart"];
-};
+>;
 
 export type UsageRejectionReason =
   | "account_request_limit"
@@ -126,13 +122,14 @@ export async function findUserUsage(
 
   return result[0] ?? null;
 }
+
 ///////////////////////////////////////////////////////
 // Consume usage and record the decision atomically
 ///////////////////////////////////////////////////////
 export async function consumeUsageTransaction(
   input: ConsumeUsageTransactionInput,
 ): Promise<ConsumeUsageResult> {
-  const { accountId, userId, requestId, requestedUnits, periodStart } = input;
+  const { accountId, userId, requestId, requestedUnits } = input;
 
   return db.transaction(async (tx): Promise<ConsumeUsageResult> => {
     ///////////////////////////////////////////////////////
@@ -180,6 +177,12 @@ export async function consumeUsageTransaction(
     }
 
     ///////////////////////////////////////////////////////
+    // Capture processing time after acquiring the account lock
+    ///////////////////////////////////////////////////////
+    const processedAt = new Date();
+    const periodStart = `${processedAt.toISOString().slice(0, 7)}-01`;
+
+    ///////////////////////////////////////////////////////
     // Read the account's current plan limits
     ///////////////////////////////////////////////////////
     const accountPlans = await tx
@@ -225,7 +228,7 @@ export async function consumeUsageTransaction(
     }
 
     ///////////////////////////////////////////////////////
-    // Read account and user usage for the current period
+    // Read account and user usage for the processing month
     ///////////////////////////////////////////////////////
     const accountUsageRows = await tx
       .select()
@@ -286,6 +289,7 @@ export async function consumeUsageTransaction(
           requestedUnits,
           status: "rejected",
           rejectionReason,
+          createdAt: processedAt,
         })
         .returning();
 
@@ -309,7 +313,7 @@ export async function consumeUsageTransaction(
         .update(usage)
         .set({
           usedUnits: sql`${usage.usedUnits} + ${requestedUnits}`,
-          updatedAt: new Date(),
+          updatedAt: processedAt,
         })
         .where(eq(usage.id, accountUsage.id));
     } else {
@@ -318,6 +322,8 @@ export async function consumeUsageTransaction(
         userId: null,
         periodStart,
         usedUnits: requestedUnits,
+        createdAt: processedAt,
+        updatedAt: processedAt,
       });
     }
 
@@ -329,7 +335,7 @@ export async function consumeUsageTransaction(
         .update(usage)
         .set({
           usedUnits: sql`${usage.usedUnits} + ${requestedUnits}`,
-          updatedAt: new Date(),
+          updatedAt: processedAt,
         })
         .where(eq(usage.id, userUsage.id));
     } else {
@@ -338,6 +344,8 @@ export async function consumeUsageTransaction(
         userId,
         periodStart,
         usedUnits: requestedUnits,
+        createdAt: processedAt,
+        updatedAt: processedAt,
       });
     }
 
@@ -353,6 +361,7 @@ export async function consumeUsageTransaction(
         requestedUnits,
         status: "accepted",
         rejectionReason: null,
+        createdAt: processedAt,
       })
       .returning();
 
