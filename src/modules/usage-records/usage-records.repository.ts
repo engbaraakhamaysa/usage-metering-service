@@ -1,4 +1,4 @@
-import { and, eq, desc, count } from "drizzle-orm";
+import { and, eq, sql, count } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { usageRecords } from "../../db/schema/usage-records.js";
@@ -17,7 +17,10 @@ export async function findUsageRecords(
     .select()
     .from(usageRecords)
     .where(eq(usageRecords.accountId, accountId))
-    .orderBy(desc(usageRecords.createdAt), desc(usageRecords.id))
+    .orderBy(
+      sql`${usageRecords.createdAt} DESC NULLS LAST`,
+      sql`${usageRecords.id} DESC NULLS LAST`,
+    )
     .limit(limit)
     .offset(offset);
 }

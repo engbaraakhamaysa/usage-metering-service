@@ -8,6 +8,7 @@ import {
   foreignKey,
   uniqueIndex,
   check,
+  index,
 } from "drizzle-orm/pg-core";
 
 import { sql } from "drizzle-orm";
@@ -64,6 +65,12 @@ export const usageRecords = pgTable(
         OR
         (${table.status} = 'rejected' AND ${table.rejectionReason} IS NOT NULL)
       )`,
+    ),
+
+    index("usage_records_account_created_at_id_idx").on(
+      table.accountId,
+      table.createdAt.desc(),
+      table.id.desc(),
     ),
   ],
 );

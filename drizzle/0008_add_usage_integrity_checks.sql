@@ -1,0 +1,1 @@
+ALTER TABLE "usage" ADD CONSTRAINT "usage_period_start_first_day" CHECK (EXTRACT(DAY FROM "usage"."period_start") = 1);

@@ -1,0 +1,141 @@
+{
+    "metrics": {
+        "data_received": {
+            "count": 14071989,
+            "rate": 234452.53570726598
+        },
+        "http_req_duration{expected_response:true}": {
+            "min": 7.198676,
+            "med": 23.056821,
+            "max": 93.563617,
+            "p(90)": 27.5274262,
+            "p(95)": 29.6463945,
+            "avg": 23.315728254551882
+        },
+        "iterations": {
+            "count": 25539,
+            "rate": 425.5036945685408
+        },
+        "vus": {
+            "value": 10,
+            "min": 10,
+            "max": 10
+        },
+        "checks": {
+            "passes": 76617,
+            "fails": 0,
+            "value": 1
+        },
+        "http_req_duration": {
+            "p(90)": 27.5274262,
+            "p(95)": 29.6463945,
+            "avg": 23.315728254551882,
+            "min": 7.198676,
+            "med": 23.056821,
+            "max": 93.563617
+        },
+        "http_req_connecting": {
+            "avg": 0.00010466674497826852,
+            "min": 0,
+            "med": 0,
+            "max": 0.408137,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "vus_max": {
+            "value": 10,
+            "min": 10,
+            "max": 10
+        },
+        "http_req_waiting": {
+            "avg": 23.243529431301248,
+            "min": 7.124463,
+            "med": 22.993522,
+            "max": 93.467086,
+            "p(90)": 27.455472999999998,
+            "p(95)": 29.5666396
+        },
+        "http_req_receiving": {
+            "avg": 0.05424470488272861,
+            "min": 0.011469,
+            "med": 0.049834,
+            "max": 1.753844,
+            "p(90)": 0.08284240000000001,
+            "p(95)": 0.09441049999999997
+        },
+        "http_reqs": {
+            "rate": 425.5036945685408,
+            "count": 25539
+        },
+        "data_sent": {
+            "count": 8606643,
+            "rate": 143394.74506959826
+        },
+        "iteration_duration": {
+            "avg": 23.48718340025047,
+            "min": 7.3607,
+            "med": 23.212394,
+            "max": 93.762057,
+            "p(90)": 27.7035558,
+            "p(95)": 29.83362769999999
+        },
+        "http_req_tls_handshaking": {
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 25539,
+            "value": 0
+        },
+        "http_req_sending": {
+            "avg": 0.017954118367986133,
+            "min": 0.005981,
+            "med": 0.016189,
+            "max": 1.863567,
+            "p(90)": 0.024791200000000003,
+            "p(95)": 0.029278499999999992
+        },
+        "http_req_blocked": {
+            "p(95)": 0.006325099999999998,
+            "avg": 0.004480742511453057,
+            "min": 0.001468,
+            "med": 0.003648,
+            "max": 1.143306,
+            "p(90)": 0.0056562
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "HTTP status is 200": {
+                    "fails": 0,
+                    "name": "HTTP status is 200",
+                    "path": "::HTTP status is 200",
+                    "id": "b99cf5b69b226f5caf2d6bf2ec0a940e",
+                    "passes": 25539
+                },
+                "consumption is accepted": {
+                    "path": "::consumption is accepted",
+                    "id": "6e3fee9cc0d8661170296d19c7f4598d",
+                    "passes": 25539,
+                    "fails": 0,
+                    "name": "consumption is accepted"
+                },
+                "request is new": {
+                    "id": "985d992c6ad28ce9df6d63fec8de631c",
+                    "passes": 25539,
+                    "fails": 0,
+                    "name": "request is new",
+                    "path": "::request is new"
+                }
+            }
+    }
+}

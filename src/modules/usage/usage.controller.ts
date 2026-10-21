@@ -6,16 +6,12 @@ import {
   consumeUsage as consumeUsageService,
   getAccountUsage as getAccountUsageService,
   getUserUsage as getUserUsageService,
-  getUsageRecordById as getUsageRecordByIdService,
-  getUsageRecords as getUsageRecordsService,
 } from "./usage.service.js";
 
 import type {
   ConsumeUsageInput,
   UserIdParams,
-  UsageRecordIdParams,
   UsageQuery,
-  UsageRecordsQuery,
 } from "./usage.validator.js";
 
 ///////////////////////////////////////////////////////
@@ -32,14 +28,6 @@ type GetAccountUsageLocals = AuthenticatedLocals & {
 type GetUserUsageLocals = AuthenticatedLocals & {
   validatedParams: UserIdParams;
   validatedQuery: UsageQuery;
-};
-
-type GetUsageRecordsLocals = AuthenticatedLocals & {
-  validatedQuery: UsageRecordsQuery;
-};
-
-type GetUsageRecordLocals = AuthenticatedLocals & {
-  validatedParams: UsageRecordIdParams;
 };
 
 ///////////////////////////////////////////////////////
@@ -150,59 +138,6 @@ export async function consumeUsage(
 
     res.status(500).json({
       error: "Failed to consume usage",
-    });
-  }
-}
-
-///////////////////////////////////////////////////////
-// GET /api/usage/records
-///////////////////////////////////////////////////////
-export async function getUsageRecords(
-  _req: Request,
-  res: Response<unknown, GetUsageRecordsLocals>,
-): Promise<void> {
-  try {
-    const accountId = res.locals.account.id;
-    const { page, limit } = res.locals.validatedQuery;
-
-    const result = await getUsageRecordsService(accountId, page, limit);
-
-    res.status(200).json(result);
-  } catch (error) {
-    console.error("Failed to get usage records:", error);
-
-    res.status(500).json({
-      error: "Failed to get usage records",
-    });
-  }
-}
-
-///////////////////////////////////////////////////////
-// GET /api/usage/records/:id
-///////////////////////////////////////////////////////
-export async function getUsageRecordById(
-  _req: Request,
-  res: Response<unknown, GetUsageRecordLocals>,
-): Promise<void> {
-  try {
-    const accountId = res.locals.account.id;
-    const { id } = res.locals.validatedParams;
-
-    const result = await getUsageRecordByIdService(accountId, id);
-
-    if (!result) {
-      res.status(404).json({
-        error: "Usage record not found",
-      });
-      return;
-    }
-
-    res.status(200).json(result);
-  } catch (error) {
-    console.error("Failed to get usage record:", error);
-
-    res.status(500).json({
-      error: "Failed to get usage record",
     });
   }
 }
