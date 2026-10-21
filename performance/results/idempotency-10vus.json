@@ -1,0 +1,162 @@
+{
+    "metrics": {
+        "http_req_waiting": {
+            "min": 7.530172,
+            "med": 40.491572,
+            "max": 110.670687,
+            "p(90)": 47.6148892,
+            "p(95)": 52.41587969999999,
+            "avg": 41.99158818673425
+        },
+        "vus": {
+            "value": 10,
+            "min": 10,
+            "max": 10
+        },
+        "data_received": {
+            "rate": 129470.49290972792,
+            "count": 1301851
+        },
+        "http_reqs": {
+            "rate": 235.40071537935293,
+            "count": 2367
+        },
+        "http_req_tls_handshaking": {
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0
+        },
+        "data_sent": {
+            "count": 797679,
+            "rate": 79330.04108284194
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(95)": 52.515459499999984,
+            "avg": 42.09328209083223,
+            "min": 7.613114,
+            "med": 40.604134,
+            "max": 110.747063,
+            "p(90)": 47.7235128
+        },
+        "http_req_receiving": {
+            "min": 0.027486,
+            "med": 0.07058,
+            "max": 0.543646,
+            "p(90)": 0.1116156,
+            "p(95)": 0.13125419999999996,
+            "avg": 0.07828405111956062
+        },
+        "iteration_duration": {
+            "avg": 42.32750869822486,
+            "min": 7.853026,
+            "med": 40.812958,
+            "max": 110.941021,
+            "p(90)": 48.027364500000004,
+            "p(95)": 52.809956
+        },
+        "http_req_failed": {
+            "passes": 0,
+            "fails": 2367,
+            "thresholds": {
+                "rate==0": false
+            },
+            "value": 0
+        },
+        "http_req_sending": {
+            "avg": 0.02340985297845374,
+            "min": 0.008502,
+            "med": 0.020011,
+            "max": 0.254887,
+            "p(90)": 0.034417600000000007,
+            "p(95)": 0.0462258
+        },
+        "http_req_connecting": {
+            "avg": 0.0015780561892691169,
+            "min": 0,
+            "med": 0,
+            "max": 0.527809,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_duration": {
+            "avg": 42.09328209083223,
+            "min": 7.613114,
+            "med": 40.604134,
+            "max": 110.747063,
+            "p(90)": 47.7235128,
+            "p(95)": 52.515459499999984
+        },
+        "http_req_blocked": {
+            "min": 0.002016,
+            "med": 0.004293,
+            "max": 0.575607,
+            "p(90)": 0.006883400000000001,
+            "p(95)": 0.008704099999999998,
+            "avg": 0.00707550316856781
+        },
+        "iterations": {
+            "count": 2366,
+            "rate": 235.30126429554247
+        },
+        "vus_max": {
+            "value": 10,
+            "min": 10,
+            "max": 10
+        },
+        "checks": {
+            "passes": 9464,
+            "fails": 0,
+            "thresholds": {
+                "rate==1": false
+            },
+            "value": 1
+        }
+    },
+    "setup_data": {
+        "recordId": "b1dc5538-9b36-46f8-999e-7c472f5c2117",
+        "body": {
+            "requestId": "d75d5278-847d-4993-97c4-7dabb0015729",
+            "requestedUnits": 1,
+            "userId": "b2f11dcb-34ec-4569-8a0f-dd192dcb108e"
+        }
+    },
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "HTTP status is 200": {
+                    "name": "HTTP status is 200",
+                    "path": "::HTTP status is 200",
+                    "id": "b99cf5b69b226f5caf2d6bf2ec0a940e",
+                    "passes": 2366,
+                    "fails": 0
+                },
+                "original accepted decision is returned": {
+                    "name": "original accepted decision is returned",
+                    "path": "::original accepted decision is returned",
+                    "id": "ec45d841de5f443c44f5689cc5f48246",
+                    "passes": 2366,
+                    "fails": 0
+                },
+                "request is a duplicate": {
+                    "name": "request is a duplicate",
+                    "path": "::request is a duplicate",
+                    "id": "8e75c3dd71db080be86fa53d91095e23",
+                    "passes": 2366,
+                    "fails": 0
+                },
+                "original record is returned": {
+                    "name": "original record is returned",
+                    "path": "::original record is returned",
+                    "id": "dbf2a0ece4d43782285fed30531ff94c",
+                    "passes": 2366,
+                    "fails": 0
+                }
+            }
+    }
+}
