@@ -1,18 +1,14 @@
 import {
   consumeUsageTransaction,
-  findAccountUsage,
-  findUserUsage,
   type ConsumeUsageResult,
-  type AccountUsageDetails,
-  type UserUsageDetails,
-} from "./usage.repository.js";
+} from "./repositories/usage-consumption.repository.js";
 
 import {
-  countUsageRecords,
-  findUsageRecordById,
-  findUsageRecords,
-  type UsageRecord,
-} from "./usage-records.repository.js";
+  findAccountUsage,
+  findUserUsage,
+  type AccountUsageDetails,
+  type UserUsageDetails,
+} from "./repositories/usage-query.repository.js";
 
 import type { ConsumeUsageInput, UsageQuery } from "./usage.validator.js";
 
@@ -31,16 +27,6 @@ type AccountUsageResult = AccountUsageDetails & {
 type UserUsageResult = UserUsageDetails & {
   periodStart: string;
   remainingUnits: number | null;
-};
-
-type UsageRecordsResult = {
-  records: UsageRecord[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
 };
 
 ///////////////////////////////////////////////////////
@@ -121,47 +107,8 @@ export async function getUserUsage(
 ///////////////////////////////////////////////////////
 // Consume units for a user under a specific account
 ///////////////////////////////////////////////////////
-///////////////////////////////////////////////////////
-// Consume units for a user under a specific account
-///////////////////////////////////////////////////////
 export async function consumeUsage(
   input: ConsumeUsageServiceInput,
 ): Promise<ConsumeUsageResult> {
   return consumeUsageTransaction(input);
-}
-
-///////////////////////////////////////////////////////
-// Get usage records with pagination
-///////////////////////////////////////////////////////
-export async function getUsageRecords(
-  accountId: string,
-  page: number,
-  limit: number,
-): Promise<UsageRecordsResult> {
-  const offset = (page - 1) * limit;
-
-  const [records, total] = await Promise.all([
-    findUsageRecords(accountId, limit, offset),
-    countUsageRecords(accountId),
-  ]);
-
-  return {
-    records,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
-
-///////////////////////////////////////////////////////
-// Get one usage record belonging to a specific account
-///////////////////////////////////////////////////////
-export async function getUsageRecordById(
-  accountId: string,
-  recordId: string,
-): Promise<UsageRecord | null> {
-  return findUsageRecordById(accountId, recordId);
 }

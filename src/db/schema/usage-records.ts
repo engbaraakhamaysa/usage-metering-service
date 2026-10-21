@@ -67,7 +67,6 @@ export const usageRecords = pgTable(
       )`,
     ),
 
-    // Support account history ordered by newest records.
     index("usage_records_account_created_at_id_idx").on(
       table.accountId,
       table.createdAt.desc(),
