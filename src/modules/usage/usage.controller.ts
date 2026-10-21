@@ -14,6 +14,7 @@ import type {
   ConsumeUsageInput,
   UserIdParams,
   UsageRecordIdParams,
+  UsageQuery,
   UsageRecordsQuery,
 } from "./usage.validator.js";
 
@@ -24,8 +25,13 @@ type ConsumeUsageLocals = AuthenticatedLocals & {
   validatedBody: ConsumeUsageInput;
 };
 
+type GetAccountUsageLocals = AuthenticatedLocals & {
+  validatedQuery: UsageQuery;
+};
+
 type GetUserUsageLocals = AuthenticatedLocals & {
   validatedParams: UserIdParams;
+  validatedQuery: UsageQuery;
 };
 
 type GetUsageRecordsLocals = AuthenticatedLocals & {
@@ -41,15 +47,23 @@ type GetUsageRecordLocals = AuthenticatedLocals & {
 ///////////////////////////////////////////////////////
 export async function getAccountUsage(
   _req: Request,
-  res: Response<unknown, AuthenticatedLocals>,
+  res: Response<unknown, GetAccountUsageLocals>,
 ): Promise<void> {
   try {
     const accountId = res.locals.account.id;
+    const { month } = res.locals.validatedQuery;
 
-    const result = await getAccountUsageService(accountId);
+    const result = await getAccountUsageService(accountId, month);
 
     res.status(200).json(result);
   } catch (error) {
+    if (error instanceof Error && error.message === "Account not found") {
+      res.status(404).json({
+        error: error.message,
+      });
+      return;
+    }
+
     console.error("Failed to get account usage:", error);
 
     res.status(500).json({
@@ -68,8 +82,9 @@ export async function getUserUsage(
   try {
     const accountId = res.locals.account.id;
     const { userId } = res.locals.validatedParams;
+    const { month } = res.locals.validatedQuery;
 
-    const result = await getUserUsageService(accountId, userId);
+    const result = await getUserUsageService(accountId, userId, month);
 
     res.status(200).json(result);
   } catch (error) {

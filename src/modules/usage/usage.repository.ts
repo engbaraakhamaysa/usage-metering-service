@@ -14,6 +14,23 @@ import type { UsageRecord } from "./usage-records.repository.js";
 ///////////////////////////////////////////////////////
 type Usage = typeof usage.$inferSelect;
 
+type Plan = typeof plans.$inferSelect;
+
+type CurrentPlan = Pick<
+  Plan,
+  "id" | "name" | "monthlyAllowance" | "maxUnitsPerRequest"
+>;
+
+export type AccountUsageDetails = {
+  accountId: string;
+  usedUnits: number;
+  currentPlan: CurrentPlan;
+};
+
+export type UserUsageDetails = AccountUsageDetails & {
+  userId: string;
+};
+
 export type ConsumeUsageTransactionInput = Pick<
   UsageRecord,
   "accountId" | "userId" | "requestId" | "requestedUnits"
@@ -33,48 +50,82 @@ export type ConsumeUsageResult = {
 };
 
 ///////////////////////////////////////////////////////
-// Find account usage for a specific month
+// Find account usage with its current plan
 ///////////////////////////////////////////////////////
 export async function findAccountUsage(
   accountId: string,
   periodStart: string,
-): Promise<Usage | null> {
+): Promise<AccountUsageDetails | null> {
   const result = await db
-    .select()
-    .from(usage)
-    .where(
+    .select({
+      accountId: accounts.id,
+      usedUnits: sql<number>`
+        COALESCE(${usage.usedUnits}, 0)
+      `.mapWith(Number),
+      currentPlan: {
+        id: plans.id,
+        name: plans.name,
+        monthlyAllowance: plans.monthlyAllowance,
+        maxUnitsPerRequest: plans.maxUnitsPerRequest,
+      },
+    })
+    .from(accounts)
+    .innerJoin(
+      plans,
+      and(eq(accounts.planId, plans.id), eq(accounts.planType, plans.planType)),
+    )
+    .leftJoin(
+      usage,
       and(
-        eq(usage.accountId, accountId),
+        eq(usage.accountId, accounts.id),
         isNull(usage.userId),
         eq(usage.periodStart, periodStart),
       ),
-    );
+    )
+    .where(eq(accounts.id, accountId));
 
   return result[0] ?? null;
 }
 
 ///////////////////////////////////////////////////////
-// Find user usage for a specific month
+// Find user usage with its current plan within an account
 ///////////////////////////////////////////////////////
 export async function findUserUsage(
   accountId: string,
   userId: string,
   periodStart: string,
-): Promise<Usage | null> {
+): Promise<UserUsageDetails | null> {
   const result = await db
-    .select()
-    .from(usage)
-    .where(
+    .select({
+      accountId: users.accountId,
+      userId: users.id,
+      usedUnits: sql<number>`
+        COALESCE(${usage.usedUnits}, 0)
+      `.mapWith(Number),
+      currentPlan: {
+        id: plans.id,
+        name: plans.name,
+        monthlyAllowance: plans.monthlyAllowance,
+        maxUnitsPerRequest: plans.maxUnitsPerRequest,
+      },
+    })
+    .from(users)
+    .innerJoin(
+      plans,
+      and(eq(users.planId, plans.id), eq(users.planType, plans.planType)),
+    )
+    .leftJoin(
+      usage,
       and(
-        eq(usage.accountId, accountId),
-        eq(usage.userId, userId),
+        eq(usage.accountId, users.accountId),
+        eq(usage.userId, users.id),
         eq(usage.periodStart, periodStart),
       ),
-    );
+    )
+    .where(and(eq(users.id, userId), eq(users.accountId, accountId)));
 
   return result[0] ?? null;
 }
-
 ///////////////////////////////////////////////////////
 // Consume usage and record the decision atomically
 ///////////////////////////////////////////////////////

@@ -3,6 +3,8 @@ import {
   findAccountUsage,
   findUserUsage,
   type ConsumeUsageResult,
+  type AccountUsageDetails,
+  type UserUsageDetails,
 } from "./usage.repository.js";
 
 import {
@@ -12,9 +14,7 @@ import {
   type UsageRecord,
 } from "./usage-records.repository.js";
 
-import { getUser } from "../users/users.service.js";
-
-import type { ConsumeUsageInput } from "./usage.validator.js";
+import type { ConsumeUsageInput, UsageQuery } from "./usage.validator.js";
 
 ///////////////////////////////////////////////////////
 // Define service input and result types
@@ -23,14 +23,14 @@ type ConsumeUsageServiceInput = ConsumeUsageInput & {
   accountId: string;
 };
 
-type AccountUsageResult = {
-  accountId: string;
+type AccountUsageResult = AccountUsageDetails & {
   periodStart: string;
-  usedUnits: number;
+  remainingUnits: number | null;
 };
 
-type UserUsageResult = AccountUsageResult & {
-  userId: string;
+type UserUsageResult = UserUsageDetails & {
+  periodStart: string;
+  remainingUnits: number | null;
 };
 
 type UsageRecordsResult = {
@@ -56,44 +56,65 @@ function getCurrentPeriodStart(): string {
 }
 
 ///////////////////////////////////////////////////////
-// Get the account's current monthly usage
+// Get account usage for the selected or current month
 ///////////////////////////////////////////////////////
 export async function getAccountUsage(
   accountId: string,
+  month?: UsageQuery["month"],
 ): Promise<AccountUsageResult> {
-  const periodStart = getCurrentPeriodStart();
+  const currentPeriodStart = getCurrentPeriodStart();
+  const periodStart = month ? `${month}-01` : currentPeriodStart;
 
   const accountUsage = await findAccountUsage(accountId, periodStart);
 
+  if (!accountUsage) {
+    throw new Error("Account not found");
+  }
+
+  const remainingUnits =
+    periodStart === currentPeriodStart
+      ? Math.max(
+          0,
+          accountUsage.currentPlan.monthlyAllowance - accountUsage.usedUnits,
+        )
+      : null;
+
   return {
-    accountId,
+    ...accountUsage,
     periodStart,
-    usedUnits: accountUsage?.usedUnits ?? 0,
+    remainingUnits,
   };
 }
 
 ///////////////////////////////////////////////////////
-// Get a user's current monthly usage within an account
+// Get user usage for the selected month within an account
 ///////////////////////////////////////////////////////
 export async function getUserUsage(
   accountId: string,
   userId: string,
+  month?: UsageQuery["month"],
 ): Promise<UserUsageResult> {
-  const user = await getUser(userId, accountId);
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  const periodStart = getCurrentPeriodStart();
+  const currentPeriodStart = getCurrentPeriodStart();
+  const periodStart = month ? `${month}-01` : currentPeriodStart;
 
   const userUsage = await findUserUsage(accountId, userId, periodStart);
 
+  if (!userUsage) {
+    throw new Error("User not found");
+  }
+
+  const remainingUnits =
+    periodStart === currentPeriodStart
+      ? Math.max(
+          0,
+          userUsage.currentPlan.monthlyAllowance - userUsage.usedUnits,
+        )
+      : null;
+
   return {
-    accountId,
-    userId,
+    ...userUsage,
     periodStart,
-    usedUnits: userUsage?.usedUnits ?? 0,
+    remainingUnits,
   };
 }
 

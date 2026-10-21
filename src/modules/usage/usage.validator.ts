@@ -30,6 +30,22 @@ export const usageRecordIdParamsSchema = z.object({
 });
 
 ///////////////////////////////////////////////////////
+// Validate the optional usage month
+///////////////////////////////////////////////////////
+export const usageQuerySchema = z.object({
+  month: z
+    .string()
+    .regex(
+      /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/,
+      "Month must use YYYY-MM format with a valid year and month",
+    )
+    .refine((month) => month <= new Date().toISOString().slice(0, 7), {
+      message: "Month cannot be in the future",
+    })
+    .optional(),
+});
+
+///////////////////////////////////////////////////////
 // Validate usage records pagination
 ///////////////////////////////////////////////////////
 export const usageRecordsQuerySchema = z.object({
@@ -56,5 +72,7 @@ export type ConsumeUsageInput = z.infer<typeof consumeUsageSchema>;
 export type UserIdParams = z.infer<typeof userIdParamsSchema>;
 
 export type UsageRecordIdParams = z.infer<typeof usageRecordIdParamsSchema>;
+
+export type UsageQuery = z.infer<typeof usageQuerySchema>;
 
 export type UsageRecordsQuery = z.infer<typeof usageRecordsQuerySchema>;
