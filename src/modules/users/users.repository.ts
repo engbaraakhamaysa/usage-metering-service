@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { users } from "../../db/schema/users.js";
+import { accounts } from "../../db/schema/accounts.js";
 
 type User = typeof users.$inferSelect;
 type NewUser = typeof users.$inferInsert;
@@ -66,18 +67,32 @@ export async function findUserById(
 }
 
 ///////////////////////////////////////////////////////
-// Update a user's plan within a specific account
+// Update a user plan after locking its account
 ///////////////////////////////////////////////////////
 export async function updateUserPlan(
   userId: string,
   accountId: string,
   planId: string,
 ): Promise<UserResult | null> {
-  const result = await db
-    .update(users)
-    .set({ planId })
-    .where(and(eq(users.id, userId), eq(users.accountId, accountId)))
-    .returning(userResultFields);
+  return db.transaction(async (tx) => {
+    const lockedAccounts = await tx
+      .select({
+        id: accounts.id,
+      })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .for("update");
 
-  return result[0] ?? null;
+    if (!lockedAccounts[0]) {
+      return null;
+    }
+
+    const result = await tx
+      .update(users)
+      .set({ planId })
+      .where(and(eq(users.id, userId), eq(users.accountId, accountId)))
+      .returning(userResultFields);
+
+    return result[0] ?? null;
+  });
 }
