@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { accounts } from "../../db/schema/accounts.js";
@@ -230,30 +230,23 @@ export async function consumeUsageTransaction(
     ///////////////////////////////////////////////////////
     // Read account and user usage for the processing month
     ///////////////////////////////////////////////////////
-    const accountUsageRows = await tx
-      .select()
+    const usageRows = await tx
+      .select({
+        id: usage.id,
+        userId: usage.userId,
+        usedUnits: usage.usedUnits,
+      })
       .from(usage)
       .where(
         and(
           eq(usage.accountId, accountId),
-          isNull(usage.userId),
           eq(usage.periodStart, periodStart),
+          or(isNull(usage.userId), eq(usage.userId, userId)),
         ),
       );
 
-    const userUsageRows = await tx
-      .select()
-      .from(usage)
-      .where(
-        and(
-          eq(usage.accountId, accountId),
-          eq(usage.userId, userId),
-          eq(usage.periodStart, periodStart),
-        ),
-      );
-
-    const accountUsage = accountUsageRows[0];
-    const userUsage = userUsageRows[0];
+    const accountUsage = usageRows.find((row) => row.userId === null);
+    const userUsage = usageRows.find((row) => row.userId === userId);
 
     const accountUsedUnits = accountUsage?.usedUnits ?? 0;
     const userUsedUnits = userUsage?.usedUnits ?? 0;

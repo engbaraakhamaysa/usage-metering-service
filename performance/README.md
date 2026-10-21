@@ -2,7 +2,7 @@
 
 ## Environment
 
-- Test date: 2026-10-20
+- Test dates: 2026-10-20 and 2026-10-21
 - Execution: local
 - CPU: Intel Core i7-1065G7, 4 physical cores / 8 logical CPUs
 - Memory: approximately 14 GiB reported by the operating system
@@ -16,7 +16,8 @@
 
 ## Test Data
 
-Ten accounts were created, each with one user and private account/user plans.
+Each preparation created ten accounts, each with one user and private
+account and user plans.
 
 Each plan had:
 
@@ -25,17 +26,20 @@ Each plan had:
 
 Accepted consumption requests used one unit and a new UUID request ID.
 
-Data accumulated between runs. The database was not reset between
-scenarios.
+Data accumulated between runs within each test round. Performance data
+from the initial round was cleaned up before preparing the current round.
 
-## Method
+## Common Method
 
-Each scenario used a constant number of virtual users for approximately
-10 seconds, without an intentional delay between iterations.
+Tests used a constant number of virtual users, without an intentional
+delay between iterations.
 
 A virtual user waited for its request to finish before starting the next
 iteration. These were concurrency-based tests, not fixed-arrival-rate
 tests.
+
+For single-account scenarios, all virtual users targeted the same account
+and its single user.
 
 For multiple-account scenarios, virtual users were distributed across
 the ten accounts:
@@ -43,10 +47,22 @@ the ten accounts:
 - 10 VUs: one VU per account
 - 50 VUs: five VUs per account
 
+A virtual user represents a load-generating execution context, not a
+separate user stored in the database.
+
 Consumption checks verified HTTP status, the expected decision, and
 whether the request was new or a duplicate.
 
-## Results
+`p95` is the response duration at or below which 95% of requests completed.
+
+## Initial Round — 2026-10-20
+
+### Method
+
+Each scenario ran once for approximately ten seconds. No dedicated
+warm-up was recorded for this round.
+
+### Results
 
 | Scenario             | VUs | Accounts | HTTP requests | Requests/s |    Average |        p95 | HTTP failures |
 | -------------------- | --: | -------: | ------------: | ---------: | ---------: | ---------: | ------------: |
@@ -59,8 +75,6 @@ whether the request was new or a duplicate.
 | Rejected consumption |  10 |        1 |         1,438 |     142.99 |   69.51 ms |   87.64 ms |            0% |
 | Mixed reads          |  10 |       10 |         9,525 |     950.56 |   10.33 ms |   16.08 ms |            0% |
 
-`p95` is the response duration at or below which 95% of requests completed.
-
 \*Idempotency HTTP metrics include one initial setup request and 2,366
 replay requests. Replay-only latency was not separately reported.
 
@@ -69,7 +83,7 @@ All application response checks passed in every completed scenario.
 The one-VU baseline was recorded from terminal output; its JSON summary
 was not exported.
 
-## Read Endpoint Latency
+### Read Endpoint Latency
 
 The mixed-read scenario executed these three requests sequentially in
 each iteration. Its overall request rate combines all three endpoints.
@@ -84,7 +98,7 @@ The scenario completed 3,175 iterations and 9,525 HTTP requests.
 
 Only the first history page was measured. Deep pagination was not tested.
 
-## Idempotency Verification
+### Idempotency Verification
 
 The setup request created one accepted record and consumed one unit.
 
@@ -95,7 +109,7 @@ The following 2,366 replay requests:
 - Returned `duplicate: true`
 - Did not increase usage or create additional records
 
-## Rejection Verification
+### Rejection Verification
 
 The rejected scenario submitted 1,001 units per request, exceeding the
 account's per-request limit of 1,000.
@@ -109,7 +123,7 @@ All 1,438 requests:
 
 A quota rejection is an expected business decision, not an HTTP failure.
 
-## Database Verification
+### Database Verification
 
 After the accepted consumption scenarios and idempotency setup:
 
@@ -127,14 +141,7 @@ After the rejected scenario:
 
 The read scenario left all totals unchanged.
 
-`npm run perf:verify` confirmed that each performance account's counter
-and its single user's counter matched their accepted units.
-
-The verification script compares cumulative units across stored periods.
-It does not independently verify the assignment of every record to a
-monthly period.
-
-## Findings
+### Findings
 
 - Distributing requests across ten accounts produced approximately
   2.7 times the throughput of targeting one account at the same VU count.
@@ -149,6 +156,137 @@ monthly period.
 These findings describe the measured local scenarios and do not establish
 maximum production capacity.
 
+## Current Version Round — 2026-10-21
+
+### Implementation Context
+
+The current implementation reads the account and user usage counters
+in one query instead of two separate queries.
+
+Other backend changes were also made after the initial performance
+round, including usage reporting and coordination of plan updates with
+consumption.
+
+The two rounds therefore do not isolate the performance effect of
+combining the counter queries. No causal speedup is claimed.
+
+### Preliminary Measurements
+
+Before the repeated 60-second runs, two ten-second runs were performed
+against one account with 10 VUs.
+
+| Run | Requests | Requests/s |  Average |       p95 | HTTP failures |
+| --: | -------: | ---------: | -------: | --------: | ------------: |
+|   1 |    1,237 |     122.89 | 80.85 ms | 106.71 ms |            0% |
+|   2 |    1,367 |     135.67 | 72.90 ms |  85.40 ms |            0% |
+
+All response checks and database verification passed.
+
+These preliminary measurements are kept separate from the repeated
+60-second measurements below.
+
+### Repeated-Run Method
+
+Four consumption configurations were measured:
+
+- One account with 10 VUs
+- Ten accounts with 10 VUs
+- One account with 50 VUs
+- Ten accounts with 50 VUs
+
+Each configuration had three completed runs of 60 seconds.
+
+Warm-up traffic preceded the repeated measurements. No separate warm-up
+was recorded before every configuration.
+
+The application remained running between measurements, and data
+accumulated throughout the round. Configurations were run sequentially;
+their order was not randomized.
+
+### Results
+
+| Accounts | VUs | Run | HTTP requests | Requests/s |   Average |       p95 | HTTP failures |
+| -------: | --: | --: | ------------: | ---------: | --------: | --------: | ------------: |
+|        1 |  10 |   1 |         8,632 |     143.72 |  69.32 ms |  81.67 ms |            0% |
+|        1 |  10 |   2 |         8,459 |     140.83 |  70.74 ms |  84.15 ms |            0% |
+|        1 |  10 |   3 |         8,662 |     144.22 |  69.07 ms |  81.53 ms |            0% |
+|       10 |  10 |   1 |        25,281 |     421.21 |  23.54 ms |  28.93 ms |            0% |
+|       10 |  10 |   2 |        25,203 |     419.96 |  23.62 ms |  28.94 ms |            0% |
+|       10 |  10 |   3 |        25,086 |     417.97 |  23.73 ms |  29.17 ms |            0% |
+|        1 |  50 |   1 |         8,430 |     139.68 | 356.71 ms | 394.89 ms |            0% |
+|        1 |  50 |   2 |         8,071 |     133.82 | 372.44 ms | 417.02 ms |            0% |
+|        1 |  50 |   3 |         7,573 |     125.46 | 397.05 ms | 446.54 ms |            0% |
+|       10 |  50 |   1 |        24,702 |     411.01 | 121.36 ms | 132.09 ms |            0% |
+|       10 |  50 |   2 |        24,533 |     408.25 | 122.19 ms | 135.94 ms |            0% |
+|       10 |  50 |   3 |        24,787 |     412.44 | 120.95 ms | 130.64 ms |            0% |
+
+All completed runs passed all response checks and had no interrupted
+iterations. Database verification passed after every completed run.
+
+The JSON summary for the completed ten-account, 10-VU run 2 was
+accidentally overwritten by an interrupted rerun. Its completed-run
+metrics above were retained from terminal output. The interrupted
+rerun is excluded from the results table.
+
+### Observed Ranges Across Three Runs
+
+| Accounts | VUs | Requests/s range | Average latency range | Per-run p95 range |
+| -------: | --: | ---------------: | --------------------: | ----------------: |
+|        1 |  10 |    140.83–144.22 |        69.07–70.74 ms |    81.53–84.15 ms |
+|       10 |  10 |    417.97–421.21 |        23.54–23.73 ms |    28.93–29.17 ms |
+|        1 |  50 |    125.46–139.68 |      356.71–397.05 ms |  394.89–446.54 ms |
+|       10 |  50 |    408.25–412.44 |      120.95–122.19 ms |  130.64–135.94 ms |
+
+These are ranges of individual-run metrics, not confidence intervals
+or percentiles calculated from pooled requests.
+
+### Database Verification
+
+Final cumulative totals were:
+
+- Sum of account counters: 207,001 units
+- Sum of user counters: 207,001 units
+- Accepted units: 207,001
+- Accepted records: 207,001
+- Total records: 207,001
+
+These totals include preliminary runs, warm-up traffic, and requests
+processed during the interrupted rerun. They are not the sum of only
+the twelve completed runs in the results table.
+
+### Findings
+
+- At 10 VUs, one account sustained 140.83–144.22 requests/s.
+- At 10 VUs, ten accounts sustained 417.97–421.21 requests/s.
+- Distributing load across ten accounts produced approximately three
+  times the single-account throughput in this round.
+- Increasing concurrency to 50 VUs increased response latency without
+  increasing throughput in the measured configurations.
+- Single-account throughput declined across the three 50-VU runs.
+  Resource utilization and database waits were not measured, so the
+  cause was not established.
+- The results are consistent with contention on the shared account
+  lock, but lock waits were not directly measured.
+- All completed consumption requests were accepted, and stored counters
+  matched accepted units.
+
+Idempotency, rejection, and read performance scenarios were measured in
+the initial round. They were not repeated in the current round.
+
+## Verification Scope
+
+`npm run perf:verify` checks that each performance account's usage counter
+and its single user's counter match the accepted units stored for that
+account.
+
+The verification compares cumulative units across stored periods.
+It does not independently verify the assignment of every record to a
+monthly period.
+
+Response checks and database verification provide complementary checks:
+response checks validate the observed API outcomes, while database
+verification checks stored usage consistency.
+
 ## Reproduction
 
 ### Prerequisites
@@ -157,6 +295,7 @@ maximum production capacity.
 - PostgreSQL test database
 - `TEST_DATABASE_URL` configured
 - k6 installed separately
+- No other tests or clients sending requests during measurements
 
 Apply migrations and prepare data:
 
@@ -165,6 +304,7 @@ NODE_ENV=test npm run db:migrate
 npm run db:seed:test
 npm run perf:prepare
 npm run build
+mkdir -p performance/results
 ```
 
 The preparation script refuses to overwrite an existing fixtures file.
@@ -176,14 +316,65 @@ Start the application in a separate terminal:
 NODE_ENV=test PORT=3001 npm start
 ```
 
-### Baseline: One Account, One VU
+Restart the application after rebuilding if the source code changes.
+
+### Warm-Up
+
+Run warm-up traffic before collecting measurements:
+
+```bash
+k6 run --vus 10 --duration 15s \
+  performance/scripts/consume-single-account.js
+```
+
+Warm-up traffic is excluded from reported measurement tables but remains
+in the cumulative database totals.
+
+### Repeated Consumption Measurements
+
+The following command runs each configuration three times for 60 seconds
+and verifies stored data after each completed run.
+
+Use a unique `measurement_id` for each measurement session to avoid
+overwriting earlier summary files.
+
+```bash
+measurement_id=$(date -u +%Y%m%dT%H%M%SZ)
+
+for vus in 10 50; do
+  for scenario in single-account multiple-accounts; do
+    for run in 1 2 3; do
+      k6 run --vus "$vus" --duration 60s \
+        --summary-export="performance/results/${measurement_id}-${scenario}-${vus}vus-run${run}.json" \
+        "performance/scripts/consume-${scenario}.js" || break 3
+
+      npm run perf:verify || break 3
+    done
+  done
+done
+```
+
+Do not run these scenarios concurrently.
+
+The recorded current-round files use the prefix `current-`. The command
+above adds a session timestamp to prevent accidental overwrites.
+
+### Initial-Round Scenario Commands
+
+The commands below reproduce the initial workload configurations against
+the checked-out application version. Running them against a newer version
+does not reproduce the original implementation.
+
+Use a unique output filename for each new execution.
+
+#### One Account, One VU
 
 ```bash
 k6 run --vus 1 --duration 10s \
   performance/scripts/consume-single-account.js
 ```
 
-### One Account, 10 VUs
+#### One Account, 10 VUs
 
 ```bash
 k6 run --vus 10 --duration 10s \
@@ -191,7 +382,7 @@ k6 run --vus 10 --duration 10s \
   performance/scripts/consume-single-account.js
 ```
 
-### Ten Accounts, 10 VUs
+#### Ten Accounts, 10 VUs
 
 ```bash
 k6 run --vus 10 --duration 10s \
@@ -199,7 +390,7 @@ k6 run --vus 10 --duration 10s \
   performance/scripts/consume-multiple-accounts.js
 ```
 
-### One Account, 50 VUs
+#### One Account, 50 VUs
 
 ```bash
 k6 run --vus 50 --duration 10s \
@@ -207,7 +398,7 @@ k6 run --vus 50 --duration 10s \
   performance/scripts/consume-single-account.js
 ```
 
-### Ten Accounts, 50 VUs
+#### Ten Accounts, 50 VUs
 
 ```bash
 k6 run --vus 50 --duration 10s \
@@ -215,7 +406,7 @@ k6 run --vus 50 --duration 10s \
   performance/scripts/consume-multiple-accounts.js
 ```
 
-### Idempotent Replay
+#### Idempotent Replay
 
 ```bash
 k6 run \
@@ -223,7 +414,7 @@ k6 run \
   performance/scripts/idempotency.js
 ```
 
-### Rejected Consumption
+#### Rejected Consumption
 
 ```bash
 k6 run \
@@ -231,7 +422,7 @@ k6 run \
   performance/scripts/rejected.js
 ```
 
-### Mixed Reads
+#### Mixed Reads
 
 ```bash
 k6 run \
@@ -255,20 +446,27 @@ excluded from version control.
 
 ## Limitations
 
-- These are short, single-run local measurements.
-- No dedicated warm-up or repeated-run statistical analysis was performed.
-- Data volume increased between scenarios.
-- The load generator competed with the application and database for
-  local resources.
+- Measurements were local, with the load generator, application, and
+  PostgreSQL competing for the same machine's resources.
+- Initial-round scenarios were single ten-second runs.
+- Current-round consumption scenarios had three 60-second runs each;
+  this is not a long-duration stability test.
+- Data volume increased between scenarios and repeated runs.
+- Scenario order was not randomized.
 - CPU usage, memory usage during testing, connection-pool waits, and
   database lock waits were not measured.
+- The rounds used different application versions and workload durations.
+  They do not isolate the performance effect of the query change.
 - VU-based tests reduce their request rate when responses slow down;
   fixed-arrival-rate overload behavior was not tested.
 - History performance was measured only for the first page with a limit
-  of ten records.
-- Results do not establish a production latency SLA.
-- Long-duration stability, database failures, and concurrent plan updates
-  were not tested in this performance round.
+  of ten records in the initial round.
+- Read, rejection, and idempotency performance was not remeasured after
+  the subsequent backend changes.
+- Results do not establish maximum production capacity or a production
+  latency SLA.
+- Database failures and concurrent plan updates were not exercised in
+  these performance measurements.
 
 ## Cleanup
 
