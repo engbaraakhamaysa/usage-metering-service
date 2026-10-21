@@ -28,12 +28,15 @@ export async function insertUser(data: NewUser): Promise<UserResult> {
   const result = await db
     .insert(users)
     .values(data)
+    .onConflictDoNothing({
+      target: [users.accountId, users.name],
+    })
     .returning(userResultFields);
 
   const user = result[0];
 
   if (!user) {
-    throw new Error("Failed to insert user");
+    throw new Error("User name already exists in this account");
   }
 
   return user;

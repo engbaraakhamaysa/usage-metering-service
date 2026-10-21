@@ -46,11 +46,20 @@ export async function createUserController(
 
     res.status(201).json(user);
   } catch (error) {
-    if (error instanceof Error && error.message === "Invalid user plan") {
-      res.status(400).json({
-        message: error.message,
-      });
-      return;
+    if (error instanceof Error) {
+      if (error.message === "Invalid user plan") {
+        res.status(400).json({
+          message: error.message,
+        });
+        return;
+      }
+
+      if (error.message === "User name already exists in this account") {
+        res.status(409).json({
+          message: error.message,
+        });
+        return;
+      }
     }
 
     console.error("Failed to create user:", error);
