@@ -6,6 +6,14 @@ commit `42a2f49856049fc8a6c5f2849fd214150623cb02`.
 This copy is maintained in this repository; it is not configured to synchronize
 with the source repository or Lovable.
 
+## AI contributions
+
+- Lovable generated the initial frontend.
+- Codex imported it into `client/`, adjusted the runtime configuration, and
+  validated the frozen dependency installation, TypeScript typecheck, production
+  build, existing routing test, and browser smoke checks for all six pages and
+  mock account creation.
+
 ## Runtime and commands
 
 Use Node.js 22.15.0 (`.nvmrc`; dependencies require Node >=22.12) and Bun 1.4.3.
