@@ -10,14 +10,15 @@ it does not synchronize with the source repository or Lovable.
 - Lovable generated the initial frontend.
 - Codex imported it into `client/`, adjusted runtime configuration, and performed
   the reported import validation. Codex subsequently connected Account, Plans,
-  and Users to the backend.
+  and Users to the backend, then connected Consumption and Records with safe
+  replay and real usage-record pagination.
 - Codex converted the frontend to a Vite React SPA with React Router and native
   fetch using React state/effects, and tested navigation, cancellation, mock
   behavior, and the connected flows against the running local backend.
 
 ## Stack and commands
 
-React 19, TypeScript, Vite 8, React Router, Tailwind CSS 4, and shadcn/ui.
+React 19, TypeScript, Vite 8.3.5, React Router, Tailwind CSS 4, and shadcn/ui.
 TanStack Start, Router, Query, Nitro, SSR entry points, generated routes, and the
 Lovable Vite wrapper have been removed. `src/main.tsx` mounts the app;
 `src/App.tsx` defines the routes and layout. `index.html` supplies document
@@ -72,7 +73,7 @@ are retained. A React error boundary retains the render-error recovery screen.
 
 ## Backend connection
 
-Account, Plans, and Users use the shared typed native-fetch client in
+Account, Plans, Users, Consumption, and Records use the shared typed native-fetch client in
 `src/api/http.ts`. Start the existing backend separately using the root npm
 commands and its configured PostgreSQL database. With API Base URL blank,
 Vite proxies `/api` to `http://127.0.0.1:3000`. Override that development target
@@ -97,8 +98,8 @@ Changing the backend URL clears authentication. Failed requests display real
 backend errors and validation issues, with no automatic mock fallback.
 
 Account reads the current plan from `GET /api/usage/account`, since there is no
-account-details GET endpoint. No consumption writes were added to the connected
-pages. Plan visibility is derived from `ownerAccountId`; `/api/plans/me` includes
+account-details GET endpoint. Consumption writes are made only from the
+Consumption page; Translation never sends real consumption requests. Plan visibility is derived from `ownerAccountId`; `/api/plans/me` includes
 public and owned plans, displayed once. Only owned private plans are editable.
 
 ## State, effects, and cancellation
@@ -120,21 +121,59 @@ new account's key after a delay.
 Aborting cannot undo a write already accepted by the backend; returning to a
 page fetches its current data again.
 
-## Remaining mock pages
+## Consumption and records
 
-Consumption, Records, and Translation continue using the original independent
-in-memory mock API. Their loading and write state now use React effects/state;
-the mock store, request IDs, replay/idempotency decisions, pagination, and
-simulated translation behavior are retained. Translation retries reuse the
-request ID and do not refund already-consumed units after a simulated failure.
-These pages never call the real backend.
+Consumption reads the connected account's real users, account usage, and selected
+user usage. Both usage summaries show used units, remaining units, current plan
+allowances, per-request limits, and the UTC period. Historical months retain the
+backend's `remainingUnits: null` as "Not applicable". Invalid/future month filters
+are rejected locally, with backend validation errors still displayed if returned.
 
-Real accounts, keys, users, and usage are not copied into that mock store.
-Navigating to mock pages with a real key still shows mock authentication errors.
-No demo-account bootstrap UI is added, so authenticated mock flows are not
-independently usable from the connected Account page. The header identifies
-connected versus mock pages. No translation provider or additional API
-integration was added.
+Each **Consume** click creates a new logical request with one UUID and the actual
+backend payload `{ userId, requestId, requestedUnits }`. A synchronous in-flight
+guard and disabled inputs/buttons prevent simultaneous submissions. A saved
+request is never changed when the form is edited. **Retry / replay last request**
+always uses its original user, units, and UUID, including after a network error
+or navigation away and back. The saved attempt and last confirmed decision live
+only in session memory and are cleared on reload, disconnect, key connection,
+or backend URL changes. No keys or saved requests are persisted to browser storage.
+
+Network errors, unexpected responses, and HTTP 5xx leave an uncertain result:
+the backend might already have processed the request. New consumption is blocked
+until the saved request is retried or the user explicitly chooses **Start a new
+request anyway**, which can consume additional units. Replay returns the original
+decision without double counting. Edited fields are used only for a new request;
+there is no action that reuses an old UUID with edited input.
+
+The backend returns a full record with `status`, `rejectionReason`, `id`, and
+`duplicate`. HTTP 200 with `status: "rejected"` is a completed business decision,
+shown alongside its reason and record ID. Authentication, validation, idempotency
+conflict (HTTP 409), and server errors remain HTTP errors. Usage-refresh errors
+are separate from write errors: they cannot turn a confirmed decision into a
+failed consumption. Completing a decision refreshes both account and selected-user
+usage and returns the month filter to the current UTC month. **Refresh usage**
+retries reads independently.
+
+Records sends the backend's `page` and `limit` query parameters, reads
+`{ records, pagination }`, and displays the returned metadata. It preserves the
+backend's newest-first ordering without sorting locally, supports limits up to
+100, and fetches each detail from `/api/usage/records/:id`. Loading, empty, and
+HTTP error states remain explicit. Revisiting the page fetches fresh records,
+including decisions made on Consumption. Connection changes reset pagination,
+details, usage, and saved requests; effect cleanup ignores late responses from
+old sessions, pages, user selections, months, and record pages.
+
+## Translation remains simulated
+
+Translation alone uses the independent in-memory mock API and simulated translator.
+No external translation provider or real metering API is called by that page.
+The header labels Translation as a demo and the five connected pages as Backend
+API. Real backend accounts, keys, and users are not copied into the mock store,
+so using a real key on Translation still produces mock authentication errors.
+There is no demo-account bootstrap UI. Its existing retry/idempotency and simulated
+failure behavior remain in the mock implementation. Unused mock usage/record read
+methods have been removed; the mock record store remains necessary for Translation's
+limits and idempotency.
 
 ## Production hosting requirements
 
@@ -168,7 +207,17 @@ With the local backend and PostgreSQL running, manually check all six direct
 page URLs and reloads, root redirect, browser back/forward, account creation and
 existing-key reconnection, private plan creation/update, account plan changes,
 user list/create/details/plan changes, and invalid-key HTTP 401 display through
-the Vite `/api` proxy. Mock pages remain independent of real backend accounts.
+the Vite `/api` proxy. Also verify accepted and rejected consumption, replay with
+unchanged counters, record ordering/pagination/details, and connection changes.
+Translation remains independent of real backend accounts.
+
+For this integration, browser verification against the running local backend and
+PostgreSQL exercised accepted/rejected decisions, rejection counters, exact-payload
+replay after form edits, record pagination/details/order, and session changes.
+Browser interception additionally simulated a lost response after a real commit,
+a usage-refresh failure, and delayed user-usage responses; these simulated transport
+conditions are distinct from actual backend outages. No frontend automated test
+files, runners, or dependencies were added.
 
 Lint retains seven pre-existing Fast Refresh warnings; the production build
 retains a large-chunk warning. TypeScript strictness is unchanged. Automated
