@@ -10,7 +10,7 @@ it does not synchronize with the source repository or Lovable.
 - Lovable generated the initial frontend.
 - Codex imported it into `client/`, adjusted runtime configuration, and performed
   the reported import validation. Codex subsequently connected Account, Plans,
-  and Users to the backend and added API integration tests.
+  and Users to the backend.
 - Codex converted the frontend to a Vite React SPA with React Router and native
   fetch using React state/effects, and tested navigation, cancellation, mock
   behavior, and the connected flows against the running local backend.
@@ -26,7 +26,10 @@ offline browsers use fallback fonts.
 
 Use Node.js 22.15.0 (`.nvmrc`; dependencies require Node >=22.12) and npm 10.9.2
 (bundled with that Node version).
-Run commands from `client/`, independently of the backend's root npm project:
+Run commands from `client/`, independently of the backend's root npm project.
+If npm 10 rejects optional WebAssembly entries in the lockfile, use temporary
+npm 11.6.2 for installation: `npx --yes npm@11.6.2 ci`. This clean-install path
+was verified on Node 22.15.0 without changing the locked dependency versions.
 
 ```sh
 npm ci
@@ -38,7 +41,6 @@ Required validation:
 ```sh
 npm run typecheck
 npm run lint
-npm run test
 npm run build
 ```
 
@@ -130,9 +132,9 @@ These pages never call the real backend.
 Real accounts, keys, users, and usage are not copied into that mock store.
 Navigating to mock pages with a real key still shows mock authentication errors.
 No demo-account bootstrap UI is added, so authenticated mock flows are not
-independently usable from the connected Account page. Tests seed mock-only
-accounts to verify those flows. The header identifies connected versus mock
-pages. No translation provider or additional API integration was added.
+independently usable from the connected Account page. The header identifies
+connected versus mock pages. No translation provider or additional API
+integration was added.
 
 ## Production hosting requirements
 
@@ -149,23 +151,28 @@ configuration, CORS changes, and deployment are outside this task.
 
 ## Validation and limits
 
-The tests cover HTTP contracts/errors/cancellation; all routes, redirect,
-navigation/history and not-found behavior; connected account/plan/user flows;
-and delayed reads/writes during identity changes, backend changes,
-disconnection, and navigation. Delayed-response tests deliberately include a
-transport that ignores abort, verifying that late results still cannot update
-the UI. These are mocked HTTP tests, not proof of backend availability.
+Frontend automated tests have been removed: there is no frontend test runner,
+test setup, test configuration, or `test`/`test:watch` command. Verification now
+relies on TypeScript checks, lint, production builds, dependency audits, and
+manual browser testing. Backend tests and their configuration remain separate
+and unchanged.
 
-A separate browser check against the running local backend and PostgreSQL used
-the Vite `/api` proxy and verified all six direct page URLs and reloads,
-root redirect, browser back/forward, account creation and existing-key
-reconnection, private plan creation/update, account plan changes, user
-list/create/details/plan changes, and invalid-key HTTP 401 display. A separate
-mock-page test verifies replay, record details, and simulated translation and
-failure/retry behavior without any native fetch calls.
+Run `npm ci` (or the npm 11.6.2 workaround above), `npm run typecheck`,
+`npm run lint`, `npm run build`, and `npm audit`. When dependencies are changed, preserve the committed security
+updates and avoid unrelated upgrades. Vite remains pinned to 8.3.5; the old
+rolldown 1.2.1 override must not be restored. If npm 10 encounters the known
+`edgesOut` error during dependency updates, use npm 11.6.2 temporarily with
+Node 22.15.0, for example `npx --yes npm@11.6.2 install --package-lock-only`.
+
+With the local backend and PostgreSQL running, manually check all six direct
+page URLs and reloads, root redirect, browser back/forward, account creation and
+existing-key reconnection, private plan creation/update, account plan changes,
+user list/create/details/plan changes, and invalid-key HTTP 401 display through
+the Vite `/api` proxy. Mock pages remain independent of real backend accounts.
 
 Lint retains seven pre-existing Fast Refresh warnings; the production build
-retains a large-chunk warning. No checks or TypeScript strictness were weakened.
-Exhaustive visual regression coverage and a deployed production host with API
-routing have not been verified. Source synchronization instructions, Git
-metadata, dependencies, secrets, build outputs, and caches are not committed.
+retains a large-chunk warning. TypeScript strictness is unchanged. Automated
+frontend regression coverage is no longer available; a deployed production
+host with API routing has not been verified. Source synchronization
+instructions, Git metadata, dependencies, secrets, build outputs, and caches
+are not committed.
