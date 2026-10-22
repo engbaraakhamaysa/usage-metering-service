@@ -118,11 +118,13 @@ function UserDetails({ id, onChanged }: { id: string; onChanged: () => void }) {
     setChange({ isPending: true, isSuccess: false, error: null });
     try {
       const data = await api.updateUserPlan(id, planId);
-      if (!active.current || connectionSignal.aborted) return;
+      if (connectionSignal.aborted) return;
+      // The list still needs refreshing if this dialog was closed while saving.
+      onChanged();
+      if (!active.current) return;
       setUser({ data, isLoading: false, error: null });
       setPlanId("");
       setChange({ isPending: false, isSuccess: true, error: null });
-      onChanged();
     } catch (error) {
       if (active.current && !connectionSignal.aborted)
         setChange({ isPending: false, isSuccess: false, error });
@@ -350,7 +352,9 @@ function ConnectedUsersPage() {
             <UserDetails
               key={selected}
               id={selected}
-              onChanged={() => setRefresh((value) => value + 1)}
+              onChanged={() => {
+                if (active.current && !connectionSignal.aborted) setRefresh((value) => value + 1);
+              }}
             />
           )}
         </DialogContent>

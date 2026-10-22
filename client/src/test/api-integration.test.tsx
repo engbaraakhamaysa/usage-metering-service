@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { SessionProvider, useSession } from "@/context/session";
 import { AccountPage } from "@/pages/account/AccountPage";
@@ -244,5 +244,160 @@ describe("Connected pages with mocked HTTP responses (not a live backend)", () =
     fireEvent.click(screen.getByRole("button", { name: "Change backend" }));
     await waitFor(() => expect(screen.getByTestId("connection")).toHaveTextContent("disconnected"));
     expect(screen.queryByText("Validation failed")).toBeNull();
+  });
+  it("ignores delayed account-A reads after connecting account B, even if the transport ignores abort", async () => {
+    const normalFetch = fetcher.getMockImplementation()!;
+    let resolveOld!: (response: Response) => void;
+    let oldSignal: AbortSignal | null | undefined;
+    fetcher.mockImplementation((url, options) => {
+      if (url === "/api/users" && new Headers(options?.headers).get("x-api-key") === "test-key") {
+        oldSignal = options?.signal;
+        return new Promise<Response>((resolve) => {
+          resolveOld = resolve;
+        });
+      }
+      if (url === "/api/users")
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([{ ...account, id: "second", name: "Account B user", accountId: "B" }]),
+          ),
+        );
+      return normalFetch(url, options);
+    });
+    mount(<UsersPage />);
+    await connect();
+    await waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("button", { name: "Change identity" }));
+    await screen.findByRole("cell", { name: "Account B user" });
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () =>
+      resolveOld(
+        new Response(JSON.stringify([{ ...account, name: "Late account A user", accountId: "A" }])),
+      ),
+    );
+    expect(screen.queryByText("Late account A user")).toBeNull();
+    expect(screen.getByRole("cell", { name: "Account B user" })).toBeInTheDocument();
+  });
+  it.each(["Disconnect session", "Change backend"])(
+    "clears private data and ignores delayed reads on %s",
+    async (button) => {
+      const normalFetch = fetcher.getMockImplementation()!;
+      let resolveOld!: (response: Response) => void;
+      let oldSignal: AbortSignal | null | undefined;
+      fetcher.mockImplementation((url, options) => {
+        if (url === "/api/users") {
+          oldSignal = options?.signal;
+          return new Promise<Response>((resolve) => {
+            resolveOld = resolve;
+          });
+        }
+        return normalFetch(url, options);
+      });
+      mount(<UsersPage />);
+      await connect();
+      await waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+      fireEvent.click(screen.getByRole("button", { name: button }));
+      await screen.findByText("No API key connected");
+      expect(oldSignal?.aborted).toBe(true);
+      await act(async () =>
+        resolveOld(
+          new Response(
+            JSON.stringify([{ ...account, name: "Late private user", accountId: "owner" }]),
+          ),
+        ),
+      );
+      expect(screen.queryByText("Late private user")).toBeNull();
+      expect(screen.getByTestId("connection")).toHaveTextContent("disconnected");
+    },
+  );
+  it("ignores delayed writes after disconnection and clears mutation results", async () => {
+    const normalFetch = fetcher.getMockImplementation()!;
+    let resolveWrite!: (response: Response) => void;
+    fetcher.mockImplementation((url, options) => {
+      if (url === "/api/users" && options?.method === "POST")
+        return new Promise<Response>((resolve) => {
+          resolveWrite = resolve;
+        });
+      return normalFetch(url, options);
+    });
+    mount(<UsersPage />);
+    await connect();
+    await screen.findByText("No users yet");
+    fill("u-name", "Delayed user");
+    await select("u-plan", /^Basic/);
+    fireEvent.click(screen.getByRole("button", { name: "Create user" }));
+    await waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect session" }));
+    await screen.findByText("No API key connected");
+    await act(async () =>
+      resolveWrite(
+        new Response(JSON.stringify({ ...account, name: "Delayed user", accountId: "owner" }), {
+          status: 201,
+        }),
+      ),
+    );
+    expect(screen.queryByText("User created.")).toBeNull();
+    expect(screen.queryByText("Delayed user")).toBeNull();
+  });
+  it("does not connect a late account-creation response after navigation", async () => {
+    const normalFetch = fetcher.getMockImplementation()!;
+    let resolveWrite!: (response: Response) => void;
+    fetcher.mockImplementation((url, options) => {
+      if (url === "/api/accounts")
+        return new Promise<Response>((resolve) => {
+          resolveWrite = resolve;
+        });
+      return normalFetch(url, options);
+    });
+    mount(
+      <>
+        <Link to="/away">Leave page</Link>
+        <Routes>
+          <Route path="/" element={<AccountPage />} />
+          <Route path="/away" element={<p>Away</p>} />
+        </Routes>
+      </>,
+    );
+    await screen.findByRole("combobox", { name: "Account plan" });
+    fill("acc-name", "Delayed account");
+    await select("acc-plan", /^Starter/);
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("link", { name: "Leave page" }));
+    await screen.findByText("Away");
+    await act(async () =>
+      resolveWrite(
+        new Response(JSON.stringify({ ...account, apiKey: "late-created-key" }), { status: 201 }),
+      ),
+    );
+    expect(screen.getByTestId("connection")).toHaveTextContent("disconnected");
+    expect(screen.queryByText("Your API key — shown only once")).toBeNull();
+  });
+  it("refreshes the user list after a successful plan write even when its dialog was closed", async () => {
+    users = [
+      { ...account, id: "user-1", name: "Existing user", accountId: "owner", planId: "basic" },
+    ];
+    const normalFetch = fetcher.getMockImplementation()!;
+    let resolveWrite!: (response: Response) => void;
+    fetcher.mockImplementation((url, options) => {
+      if (url === "/api/users/user-1/plan")
+        return new Promise<Response>((resolve) => {
+          resolveWrite = resolve;
+        });
+      return normalFetch(url, options);
+    });
+    mount(<UsersPage />);
+    await connect();
+    await screen.findByRole("cell", { name: "Existing user" });
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    await screen.findByRole("combobox", { name: "Change plan" });
+    await select("ud-plan", /^Private user/);
+    fireEvent.click(screen.getByRole("button", { name: "Change plan" }));
+    await waitFor(() => expect(resolveWrite).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    users[0]!.planId = "private-user";
+    await act(async () => resolveWrite(new Response(JSON.stringify(users[0]))));
+    await screen.findByRole("cell", { name: "Private user" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
