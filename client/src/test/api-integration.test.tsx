@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { SessionProvider, useSession } from "@/context/session";
@@ -38,27 +37,23 @@ function SessionControls() {
     <>
       <button onClick={() => setApiKey("test-key")}>Use test key</button>
       <button onClick={() => setApiKey("second-test-key")}>Change identity</button>
+      <button onClick={() => setApiKey(null)}>Disconnect session</button>
       <button onClick={() => setBaseUrl("/other")}>Change backend</button>
       <output data-testid="connection">{apiKey ? "connected" : "disconnected"}</output>
     </>
   );
 }
 function mount(page: ReactNode) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  render(
+  return render(
     <MemoryRouter>
-      <QueryClientProvider client={client}>
-        <SessionProvider>
-          <SessionControls />
-          {page}
-        </SessionProvider>
-      </QueryClientProvider>
+      <SessionProvider>
+        <SessionControls />
+        {page}
+      </SessionProvider>
     </MemoryRouter>,
   );
-  return client;
 }
+
 async function connect() {
   fireEvent.click(await screen.findByRole("button", { name: "Use test key" }));
 }
@@ -196,18 +191,11 @@ describe("Connected pages with mocked HTTP responses (not a live backend)", () =
   });
   it("displays backend authentication and server errors without mock fallback", async () => {
     fail = { path: "/api/users", status: 401, error: "Invalid API key" };
-    const cache = mount(<UsersPage />);
+    mount(<UsersPage />);
     await connect();
     await screen.findByText("Invalid API key");
     expect(screen.queryByText("No users yet")).toBeNull();
-    expect(
-      JSON.stringify(
-        cache
-          .getQueryCache()
-          .getAll()
-          .map((q) => q.queryKey),
-      ),
-    ).not.toContain("test-key");
+
     fail = { path: "/api/users", status: 500, error: "Internal server error" };
     fireEvent.click(screen.getByRole("button", { name: "Change identity" }));
     await screen.findByText("Internal server error");

@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SessionProvider } from "@/context/session";
+import { SessionProvider, useSession } from "@/context/session";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Toaster } from "@/components/ui/sonner";
 import { AccountPage } from "@/pages/account/AccountPage";
@@ -13,9 +12,11 @@ import { TranslationPage } from "@/pages/translation/TranslationPage";
 
 function PageRoutes() {
   const { pathname } = useLocation();
+  const { hideCreatedKey } = useSession();
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [pathname]);
+    if (pathname !== "/account") hideCreatedKey();
+  }, [pathname, hideCreatedKey]);
   return (
     <AppLayout>
       <Routes>
@@ -52,12 +53,9 @@ function PageRoutes() {
   );
 }
 export function App() {
-  const [queryClient] = useState(() => new QueryClient());
   return (
-    <QueryClientProvider client={queryClient}>
-      <SessionProvider>
-        <PageRoutes />
-      </SessionProvider>
-    </QueryClientProvider>
+    <SessionProvider>
+      <PageRoutes />
+    </SessionProvider>
   );
 }

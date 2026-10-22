@@ -153,4 +153,22 @@ describe("HTTP management client", () => {
     ])
       expect(() => normalizeBaseUrl(value)).toThrow();
   });
+  it("passes connection cancellation through to native fetch", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn<typeof fetch>(
+      (_url, options) =>
+        new Promise<Response>((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        }),
+    );
+    const api = createHttpApi({ baseUrl: "", apiKey: "test-key" }, fetcher, controller.signal);
+    const request = api.listUsers();
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
 });

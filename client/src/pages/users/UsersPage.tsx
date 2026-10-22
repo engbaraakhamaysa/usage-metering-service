@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { usePageActive } from "@/hooks/use-page-active";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,27 +29,33 @@ import {
 } from "@/components/ui/states";
 import { useBackendSession } from "@/api/use-backend-session";
 import { formatDate } from "@/utils";
-import type { Plan } from "@/types";
+import type { Plan, User } from "@/types";
 
 function useUserPlans() {
-  const { api, apiKey, backendScope } = useBackendSession();
-  const pub = useQuery({
-    queryKey: [...backendScope, "plans", "public", "user"],
-    retry: false,
-    queryFn: () => api.listPublicPlans("user"),
-  });
-  const mine = useQuery({
-    queryKey: [...backendScope, "plans", "me", "user"],
-    retry: false,
-    queryFn: () => api.listMyPlans("user"),
-    enabled: !!apiKey,
-  });
-  const plans: Plan[] = apiKey ? (mine.data ?? []) : (pub.data ?? []);
-  return {
-    plans,
-    error: pub.error ?? mine.error,
-    loading: pub.isLoading || (!!apiKey && mine.isLoading),
-  };
+  const { api, apiKey, connectionSignal } = useBackendSession();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let current = true;
+    const request = apiKey ? api.listMyPlans("user") : api.listPublicPlans("user");
+    request
+      .then(
+        (data) => {
+          if (current && !connectionSignal.aborted) setPlans(data);
+        },
+        (cause: unknown) => {
+          if (current && !connectionSignal.aborted) setError(cause);
+        },
+      )
+      .finally(() => {
+        if (current && !connectionSignal.aborted) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal]);
+  return { plans, error, loading };
 }
 
 function PlanSelect({
@@ -79,28 +85,53 @@ function PlanSelect({
   );
 }
 
-function UserDetails({ id }: { id: string }) {
-  const { api, apiKey, backendScope } = useBackendSession();
-  const qc = useQueryClient();
+function UserDetails({ id, onChanged }: { id: string; onChanged: () => void }) {
+  const { api, connectionSignal } = useBackendSession();
+  const active = usePageActive();
   const { plans, error: plansError, loading: plansLoading } = useUserPlans();
-  const user = useQuery({
-    queryKey: [...backendScope, "user", id],
-    retry: false,
-    queryFn: () => api.getUser(id),
+  const [user, setUser] = useState<{ data: User | null; isLoading: boolean; error: unknown }>({
+    data: null,
+    isLoading: true,
+    error: null,
   });
   const [planId, setPlanId] = useState("");
-  const change = useMutation({
-    mutationKey: ["backend", "user-plan"],
-    mutationFn: () => api.updateUserPlan(id, planId),
-    onSuccess: () => {
-      setPlanId("");
-      qc.invalidateQueries();
-    },
+  const [change, setChange] = useState({
+    isPending: false,
+    isSuccess: false,
+    error: null as unknown,
   });
+  useEffect(() => {
+    let current = true;
+    api.getUser(id).then(
+      (data) => {
+        if (current && !connectionSignal.aborted) setUser({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) setUser({ data: null, isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, id, connectionSignal]);
+  const changePlan = async () => {
+    setChange({ isPending: true, isSuccess: false, error: null });
+    try {
+      const data = await api.updateUserPlan(id, planId);
+      if (!active.current || connectionSignal.aborted) return;
+      setUser({ data, isLoading: false, error: null });
+      setPlanId("");
+      setChange({ isPending: false, isSuccess: true, error: null });
+      onChanged();
+    } catch (error) {
+      if (active.current && !connectionSignal.aborted)
+        setChange({ isPending: false, isSuccess: false, error });
+    }
+  };
   if (user.isLoading) return <LoadingState />;
   if (user.error) return <ErrorState error={user.error} />;
   if (!user.data) return null;
-  const plan = plans.find((p) => p.id === user.data.planId);
+  const plan = plans.find((p) => p.id === user.data?.planId);
   return (
     <div className="space-y-4 text-sm">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
@@ -114,12 +145,12 @@ function UserDetails({ id }: { id: string }) {
         <dd>{formatDate(user.data.createdAt)}</dd>
       </dl>
       {plansLoading && <LoadingState label="Loading user plans…" />}
-      {plansError && <ErrorState error={plansError} />}
+      {Boolean(plansError) && <ErrorState error={plansError} />}
       <form
         className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
-          change.mutate();
+          void changePlan();
         }}
       >
         <Field
@@ -129,7 +160,7 @@ function UserDetails({ id }: { id: string }) {
         >
           <PlanSelect
             id="ud-plan"
-            plans={plans.filter((p) => p.id !== user.data.planId)}
+            plans={plans.filter((p) => p.id !== user.data?.planId)}
             value={planId}
             onChange={setPlanId}
           />
@@ -146,38 +177,64 @@ function UserDetails({ id }: { id: string }) {
           User plan updated.
         </p>
       )}
-      {change.error && <ErrorState error={change.error} />}
+      {Boolean(change.error) && <ErrorState error={change.error} />}
     </div>
   );
 }
 
 export function UsersPage() {
-  const { backendScope } = useBackendSession();
-  return <ConnectedUsersPage key={JSON.stringify(backendScope)} />;
+  const { connectionId } = useBackendSession();
+  return <ConnectedUsersPage key={connectionId} />;
 }
 
 function ConnectedUsersPage() {
-  const { api, apiKey, backendScope } = useBackendSession();
-  const qc = useQueryClient();
+  const { api, apiKey, connectionSignal } = useBackendSession();
+  const active = usePageActive();
   const { plans, error: plansError, loading: plansLoading } = useUserPlans();
-  const users = useQuery({
-    queryKey: [...backendScope, "users"],
-    retry: false,
-    queryFn: api.listUsers,
-    enabled: !!apiKey,
+  const [users, setUsers] = useState<{ data: User[]; isLoading: boolean; error: unknown }>({
+    data: [],
+    isLoading: !!apiKey,
+    error: null,
   });
+  const [refresh, setRefresh] = useState(0);
   const [name, setName] = useState("");
   const [planId, setPlanId] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const create = useMutation({
-    mutationKey: ["backend", "create-user"],
-    mutationFn: () => api.createUser({ name, planId }),
-    onSuccess: () => {
+  const [create, setCreate] = useState({
+    isPending: false,
+    isSuccess: false,
+    error: null as unknown,
+  });
+  useEffect(() => {
+    if (!apiKey) return;
+    let current = true;
+    setUsers({ data: [], isLoading: true, error: null });
+    api.listUsers().then(
+      (data) => {
+        if (current && !connectionSignal.aborted) setUsers({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) setUsers({ data: [], isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal, refresh]);
+  const createUser = async () => {
+    setCreate({ isPending: true, isSuccess: false, error: null });
+    try {
+      await api.createUser({ name, planId });
+      if (!active.current || connectionSignal.aborted) return;
       setName("");
       setPlanId("");
-      qc.invalidateQueries({ queryKey: [...backendScope, "users"] });
-    },
-  });
+      setCreate({ isPending: false, isSuccess: true, error: null });
+      setRefresh((value) => value + 1);
+    } catch (error) {
+      if (active.current && !connectionSignal.aborted)
+        setCreate({ isPending: false, isSuccess: false, error });
+    }
+  };
 
   if (!apiKey)
     return (
@@ -203,7 +260,7 @@ function ConnectedUsersPage() {
             className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              create.mutate();
+              void createUser();
             }}
           >
             <Field label="Name" htmlFor="u-name">
@@ -230,13 +287,13 @@ function ConnectedUsersPage() {
               {create.isPending ? "Creating…" : "Create user"}
             </Button>
           </form>
-          {plansError && <ErrorState error={plansError} />}
+          {Boolean(plansError) && <ErrorState error={plansError} />}
           {create.isSuccess && (
             <p role="status" className="text-sm text-muted-foreground">
               User created.
             </p>
           )}
-          {create.error && <ErrorState error={create.error} />}
+          {Boolean(create.error) && <ErrorState error={create.error} />}
         </CardContent>
       </Card>
       <Card>
@@ -289,7 +346,13 @@ function ConnectedUsersPage() {
           <DialogHeader>
             <DialogTitle>User details</DialogTitle>
           </DialogHeader>
-          {selected && <UserDetails id={selected} />}
+          {selected && (
+            <UserDetails
+              key={selected}
+              id={selected}
+              onChanged={() => setRefresh((value) => value + 1)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

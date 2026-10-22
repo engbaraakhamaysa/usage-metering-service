@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { usePageActive } from "@/hooks/use-page-active";
+import type { Plan } from "@/types";
+import type { ManagementApi } from "@/api/http";
 import { Check, Copy, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,64 +29,125 @@ import { useBackendSession } from "@/api/use-backend-session";
 import { normalizeBaseUrl } from "@/api/http";
 
 export function AccountPage() {
-  const { api, apiKey, setApiKey, baseUrl, setBaseUrl, backendScope } = useBackendSession();
-  const qc = useQueryClient();
+  const { connectionId } = useBackendSession();
+  return <ConnectedAccountPage key={connectionId} />;
+}
+function ConnectedAccountPage() {
+  const {
+    api,
+    apiKey,
+    setApiKey,
+    baseUrl,
+    setBaseUrl,
+    connectionSignal,
+    createdKey: newKey,
+    hideCreatedKey,
+    connectCreatedAccount,
+  } = useBackendSession();
+  const active = usePageActive();
   const [name, setName] = useState("");
   const [planId, setPlanId] = useState("");
-  const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [keyInput, setKeyInput] = useState("");
+  const [keyInput, setKeyInput] = useState(apiKey ?? "");
   const [urlInput, setUrlInput] = useState(baseUrl);
   const [urlError, setUrlError] = useState<Error | null>(null);
-  const pendingConnection = useIsMutating({ mutationKey: ["backend"] }) > 0;
-
-  const publicPlans = useQuery({
-    queryKey: [...backendScope, "plans", "public", "account"],
-    retry: false,
-    queryFn: () => api.listPublicPlans("account"),
-  });
-  const myPlans = useQuery({
-    queryKey: [...backendScope, "plans", "me", "account"],
-    retry: false,
-    queryFn: () => api.listMyPlans("account"),
-    enabled: !!apiKey,
-  });
-  const usage = useQuery({
-    queryKey: [...backendScope, "account-plan"],
-    retry: false,
-    queryFn: () => api.getAccountPlan(),
-    enabled: !!apiKey,
-  });
-
-  const create = useMutation({
-    mutationKey: ["backend", "create-account"],
-    mutationFn: () => api.createAccount({ name, planId }),
-    onSuccess: (res) => {
-      setNewKey(res.apiKey);
-      setApiKey(res.apiKey);
-      setKeyInput(res.apiKey);
-      setName("");
-      setSwitchTo("");
-      qc.invalidateQueries();
-    },
-  });
   const [switchTo, setSwitchTo] = useState("");
-  const switchPlan = useMutation({
-    mutationKey: ["backend", "account-plan"],
-    mutationFn: () => api.updateAccountPlan(switchTo),
-    onSuccess: () => {
-      setSwitchTo("");
-      qc.invalidateQueries();
-    },
+  const [refresh, setRefresh] = useState(0);
+  const [publicPlans, setPublicPlans] = useState<{
+    data: Plan[];
+    isLoading: boolean;
+    error: unknown;
+  }>({ data: [], isLoading: true, error: null });
+  const [myPlans, setMyPlans] = useState<{ data: Plan[]; isLoading: boolean; error: unknown }>({
+    data: [],
+    isLoading: !!apiKey,
+    error: null,
   });
-
-  const currentPlan = myPlans.data?.find((plan) => plan.id === usage.data?.id);
+  const [usage, setUsage] = useState<{
+    data: Awaited<ReturnType<ManagementApi["getAccountPlan"]>> | null;
+    isLoading: boolean;
+    error: unknown;
+  }>({ data: null, isLoading: !!apiKey, error: null });
+  const [create, setCreate] = useState({ isPending: false, error: null as unknown });
+  const [switchPlan, setSwitchPlan] = useState({
+    isPending: false,
+    isSuccess: false,
+    error: null as unknown,
+  });
+  const pendingConnection = create.isPending || switchPlan.isPending;
+  useEffect(() => {
+    let current = true;
+    setPublicPlans({ data: [], isLoading: true, error: null });
+    api.listPublicPlans("account").then(
+      (data) => {
+        if (current && !connectionSignal.aborted)
+          setPublicPlans({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted)
+          setPublicPlans({ data: [], isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, connectionSignal]);
+  useEffect(() => {
+    if (!apiKey) return;
+    let current = true;
+    setMyPlans({ data: [], isLoading: true, error: null });
+    setUsage({ data: null, isLoading: true, error: null });
+    Promise.all([api.listMyPlans("account"), api.getAccountPlan()]).then(
+      ([plans, plan]) => {
+        if (current && !connectionSignal.aborted) {
+          setMyPlans({ data: plans, isLoading: false, error: null });
+          setUsage({ data: plan, isLoading: false, error: null });
+        }
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) {
+          setMyPlans({ data: [], isLoading: false, error });
+          setUsage({ data: null, isLoading: false, error });
+        }
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal, refresh]);
+  const createAccount = async () => {
+    if (create.isPending) return;
+    setCreate({ isPending: true, error: null });
+    try {
+      const response = await api.createAccount({ name, planId });
+      if (active.current && !connectionSignal.aborted) connectCreatedAccount(response.apiKey);
+    } catch (error) {
+      if (active.current && !connectionSignal.aborted) setCreate({ isPending: false, error });
+    }
+  };
+  const changePlan = async () => {
+    setSwitchPlan({ isPending: true, isSuccess: false, error: null });
+    try {
+      await api.updateAccountPlan(switchTo);
+      if (!active.current || connectionSignal.aborted) return;
+      setSwitchTo("");
+      setSwitchPlan({ isPending: false, isSuccess: true, error: null });
+      setRefresh((value) => value + 1);
+    } catch (error) {
+      if (active.current && !connectionSignal.aborted)
+        setSwitchPlan({ isPending: false, isSuccess: false, error });
+    }
+  };
+  const currentPlan = myPlans.data.find((plan) => plan.id === usage.data?.id);
 
   const copy = async () => {
     if (!newKey) return;
     await navigator.clipboard.writeText(newKey);
+    if (!active.current || connectionSignal.aborted) return;
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setTimeout(() => {
+      if (active.current && !connectionSignal.aborted) setCopied(false);
+    }, 1500);
   };
 
   return (
@@ -104,7 +167,7 @@ export function AccountPage() {
             className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end"
             onSubmit={(e) => {
               e.preventDefault();
-              create.mutate();
+              void createAccount();
             }}
           >
             <Field label="Name" htmlFor="acc-name">
@@ -142,7 +205,7 @@ export function AccountPage() {
               {create.isPending ? "Creating…" : "Create account"}
             </Button>
           </form>
-          {create.error && <ErrorState error={create.error} />}
+          {Boolean(create.error) && <ErrorState error={create.error} />}
           {newKey && (
             <Alert>
               <KeyRound className="h-4 w-4" />
@@ -158,7 +221,7 @@ export function AccountPage() {
                     {copied ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => setNewKey(null)}>
+                <Button size="sm" variant="ghost" onClick={hideCreatedKey}>
                   I've saved it
                 </Button>
               </AlertDescription>
@@ -198,12 +261,10 @@ export function AccountPage() {
                     setBaseUrl(url);
                     setUrlInput(url);
                     setUrlError(null);
-                    setNewKey(null);
+                    hideCreatedKey();
                     setKeyInput("");
                     setPlanId("");
                     setSwitchTo("");
-                    create.reset();
-                    switchPlan.reset();
                   } catch (error) {
                     setUrlError(error instanceof Error ? error : new Error("Invalid URL"));
                   }
@@ -226,12 +287,10 @@ export function AccountPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               onClick={() => {
-                setNewKey(null);
+                hideCreatedKey();
                 setSwitchTo("");
-                create.reset();
-                switchPlan.reset();
+
                 setApiKey(keyInput.trim() || null);
-                qc.invalidateQueries();
               }}
               disabled={!keyInput.trim() || pendingConnection}
             >
@@ -240,13 +299,11 @@ export function AccountPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setNewKey(null);
+                hideCreatedKey();
                 setSwitchTo("");
-                create.reset();
-                switchPlan.reset();
+
                 setApiKey(null);
                 setKeyInput("");
-                qc.clear();
               }}
               disabled={!apiKey || pendingConnection}
             >
@@ -285,7 +342,7 @@ export function AccountPage() {
                   className="flex flex-col gap-2 md:flex-row"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    switchPlan.mutate();
+                    void changePlan();
                   }}
                 >
                   <Select value={switchTo} onValueChange={setSwitchTo}>
@@ -296,7 +353,7 @@ export function AccountPage() {
                       <SelectGroup>
                         <SelectLabel>Public</SelectLabel>
                         {publicPlans.data?.map((p) => (
-                          <SelectItem key={p.id} value={p.id} disabled={p.id === usage.data.id}>
+                          <SelectItem key={p.id} value={p.id} disabled={p.id === usage.data?.id}>
                             {p.name}
                           </SelectItem>
                         ))}
@@ -307,7 +364,11 @@ export function AccountPage() {
                           {myPlans.data
                             ?.filter((p) => !p.isPublic)
                             .map((p) => (
-                              <SelectItem key={p.id} value={p.id} disabled={p.id === usage.data.id}>
+                              <SelectItem
+                                key={p.id}
+                                value={p.id}
+                                disabled={p.id === usage.data?.id}
+                              >
                                 {p.name}
                               </SelectItem>
                             ))}
@@ -324,7 +385,7 @@ export function AccountPage() {
                     Account plan updated.
                   </p>
                 )}
-                {switchPlan.error && <ErrorState error={switchPlan.error} />}
+                {Boolean(switchPlan.error) && <ErrorState error={switchPlan.error} />}
               </>
             )
           )}
