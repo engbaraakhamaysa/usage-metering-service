@@ -30,14 +30,6 @@ export interface User {
   createdAt: string;
 }
 
-export interface Usage {
-  usedUnits: number;
-  /** null for historical months */
-  remainingUnits: number | null;
-  currentPlan: Plan;
-  periodStart: string;
-}
-
 export type RejectionReason =
   "account_request_limit" | "account_monthly_limit" | "user_request_limit" | "user_monthly_limit";
 
@@ -45,32 +37,6 @@ export interface ConsumeRequest {
   userId: string;
   requestId: string;
   requestedUnits: number;
-}
-
-export interface ConsumeResult {
-  accepted: boolean;
-  rejectionReason: RejectionReason | null;
-  duplicate: boolean;
-}
-
-export type RecordStatus = "accepted" | "rejected";
-
-export interface UsageRecord {
-  id: string;
-  requestId: string;
-  userId: string;
-  requestedUnits: number;
-  status: RecordStatus;
-  rejectionReason: RejectionReason | null;
-  createdAt: string;
-}
-
-export interface Paginated<T> {
-  data: T[];
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
 }
 
 export interface ApiErrorBody {

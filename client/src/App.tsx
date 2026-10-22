@@ -8,7 +8,6 @@ import { PlansPage } from "@/pages/plans/PlansPage";
 import { UsersPage } from "@/pages/users/UsersPage";
 import { ConsumptionPage } from "@/pages/consumption/ConsumptionPage";
 import { RecordsPage } from "@/pages/records/RecordsPage";
-import { TranslationPage } from "@/pages/translation/TranslationPage";
 
 function PageRoutes() {
   const { pathname } = useLocation();
@@ -26,7 +25,7 @@ function PageRoutes() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/consumption" element={<ConsumptionPage />} />
         <Route path="/records" element={<RecordsPage />} />
-        <Route path="/translation" element={<TranslationPage />} />
+        <Route path="/translation" element={<Navigate to="/consumption" replace />} />
         <Route
           path="*"
           element={

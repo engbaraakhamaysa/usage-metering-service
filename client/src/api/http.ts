@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ConsumeRequest } from "@/types";
-import type { ApiClient, ApiConfig } from "./client";
+import type { ManagementMethods, ApiConfig } from "./client";
 import { ApiError, NetworkError } from "./errors";
 
 // Wire schemas follow the backend's controllers and selected repository fields.
@@ -70,19 +70,7 @@ export type BackendRecords = z.infer<typeof recordsSchema>;
 
 const errorSchema = z.object({ error: z.string(), errors: z.unknown().optional() });
 
-export type ManagementApi = Pick<
-  ApiClient,
-  | "listPublicPlans"
-  | "createAccount"
-  | "updateAccountPlan"
-  | "listMyPlans"
-  | "createPlan"
-  | "updatePlan"
-  | "listUsers"
-  | "createUser"
-  | "getUser"
-  | "updateUserPlan"
-> & {
+export type ManagementApi = ManagementMethods & {
   getAccountPlan(): Promise<z.infer<typeof currentPlanSchema>>;
   getAccountUsage(month?: string): Promise<BackendUsage>;
   getUserUsage(userId: string, month?: string): Promise<BackendUsage>;

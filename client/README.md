@@ -11,10 +11,12 @@ it does not synchronize with the source repository or Lovable.
 - Codex imported it into `client/`, adjusted runtime configuration, and performed
   the reported import validation. Codex subsequently connected Account, Plans,
   and Users to the backend, then connected Consumption and Records with safe
-  replay and real usage-record pagination.
+  replay and real usage-record pagination. Codex organized the five connected
+  pages into local components and hooks, added browser-counted text consumption,
+  and removed the simulated Translation page and mock API.
 - Codex converted the frontend to a Vite React SPA with React Router and native
-  fetch using React state/effects, and tested navigation, cancellation, mock
-  behavior, and the connected flows against the running local backend.
+  fetch using React state/effects, and verified navigation, cancellation,
+  replay behavior, and connected flows against the running local backend.
 
 ## Stack and commands
 
@@ -43,6 +45,7 @@ Required validation:
 npm run typecheck
 npm run lint
 npm run build
+npm audit
 ```
 
 The production build is static files in `dist/`. To inspect it locally:
@@ -64,8 +67,9 @@ separately from locked installs.
 
 ## Routes and design
 
-The six URLs remain `/account`, `/plans`, `/users`, `/consumption`, `/records`,
-and `/translation`. `/` redirects to `/account` using history replacement.
+The five pages are `/account`, `/plans`, `/users`, `/consumption`, and `/records`.
+The former `/translation` URL redirects to `/consumption` with history replacement.
+`/` redirects to `/account` using history replacement.
 Unknown URLs show the existing not-found design. React Router links preserve
 client-side navigation and browser back/forward. The sidebar, layout, styles,
 forms, dialogs, loading/empty/success/error displays, and shadcn/ui components
@@ -99,7 +103,7 @@ backend errors and validation issues, with no automatic mock fallback.
 
 Account reads the current plan from `GET /api/usage/account`, since there is no
 account-details GET endpoint. Consumption writes are made only from the
-Consumption page; Translation never sends real consumption requests. Plan visibility is derived from `ownerAccountId`; `/api/plans/me` includes
+Consumption page. Plan visibility is derived from `ownerAccountId`; `/api/plans/me` includes
 public and owned plans, displayed once. Only owned private plans are editable.
 
 ## State, effects, and cancellation
@@ -115,11 +119,20 @@ increments a connection ID. Pages remount on that ID, clearing account-specific
 forms, dialogs, data, and write results. Read effects ignore results after
 cleanup (including filter changes and navigation). Event-handler continuations
 also check page lifetime and the captured connection signal before updating
-state. Mock requests capture their original credentials instead of reading a
-new account's key after a delay.
+state.
 
 Aborting cannot undo a write already accepted by the backend; returning to a
 page fetches its current data again.
+
+## Feature structure
+
+Each feature stays under `src/pages/{account,plans,users,consumption,records}/`.
+Its `*Page.tsx` entry point composes meaningful sections from local `components/`;
+`useAccountPage`, `usePlansPage`, `useUsersPage`, `useConsumptionPage`, and
+`useRecordsPage` own the page state, effects, and write handlers. `useUsage` handles
+month/selection-sensitive usage reads separately from consumption writes.
+User-plan options and detail dialogs keep their feature-specific state locally.
+Shared HTTP contracts, parsing, and error handling stay in `src/api/`.
 
 ## Consumption and records
 
@@ -129,14 +142,36 @@ allowances, per-request limits, and the UTC period. Historical months retain the
 backend's `remainingUnits: null` as "Not applicable". Invalid/future month filters
 are rejected locally, with backend validation errors still displayed if returned.
 
-Each **Consume** click creates a new logical request with one UUID and the actual
+### Text consumption
+
+Manual units and **Text consumption** share the existing consumption endpoint and
+real connected users. Text is counted entirely in the browser: trim it, return zero
+if empty, otherwise split on one or more whitespace characters (`/\s+/`). One token
+is one word and one unit. Repeated spaces, tabs, and newlines do not add units;
+punctuation attached to a word does not add words. Arabic and English use the same
+rule. Empty/whitespace-only text cannot be submitted.
+
+This is a metered word-count demo convention. It performs no translation or external
+processing. The backend receives only `{ userId, requestId, requestedUnits }`, never
+the text; it validates units and quotas but cannot verify the original text or enforce
+this word-counting rule. Text and its replay snapshot remain in React memory only.
+
+### Decisions and replay
+
+Each **Consume** or **Consume text** click creates a new logical request with one UUID and the actual
 backend payload `{ userId, requestId, requestedUnits }`. A synchronous in-flight
 guard and disabled inputs/buttons prevent simultaneous submissions. A saved
-request is never changed when the form is edited. **Retry / replay last request**
-always uses its original user, units, and UUID, including after a network error
+attempt captures its mode, user, units, UUID, and original text when applicable.
+The request payload is frozen and never changed when either form is edited.
+The shared **Last consumption request** card identifies the saved mode and payload,
+and displays the original text snapshot for text attempts. **Retry / replay last request**
+always uses that original snapshot, user, units, and UUID, including after a network error
 or navigation away and back. The saved attempt and last confirmed decision live
 only in session memory and are cleared on reload, disconnect, key connection,
-or backend URL changes. No keys or saved requests are persisted to browser storage.
+or backend URL changes. No keys, text snapshots, or saved requests are persisted to browser storage.
+The text form itself resets when navigating away; the saved attempt remains available
+until replaced or the session changes. Both forms share the selected user with the
+usage summary; replay still uses the saved user if the selection has changed.
 
 Network errors, unexpected responses, and HTTP 5xx leave an uncertain result:
 the backend might already have processed the request. New consumption is blocked
@@ -162,18 +197,6 @@ HTTP error states remain explicit. Revisiting the page fetches fresh records,
 including decisions made on Consumption. Connection changes reset pagination,
 details, usage, and saved requests; effect cleanup ignores late responses from
 old sessions, pages, user selections, months, and record pages.
-
-## Translation remains simulated
-
-Translation alone uses the independent in-memory mock API and simulated translator.
-No external translation provider or real metering API is called by that page.
-The header labels Translation as a demo and the five connected pages as Backend
-API. Real backend accounts, keys, and users are not copied into the mock store,
-so using a real key on Translation still produces mock authentication errors.
-There is no demo-account bootstrap UI. Its existing retry/idempotency and simulated
-failure behavior remain in the mock implementation. Unused mock usage/record read
-methods have been removed; the mock record store remains necessary for Translation's
-limits and idempotency.
 
 ## Production hosting requirements
 
@@ -203,21 +226,30 @@ rolldown 1.2.1 override must not be restored. If npm 10 encounters the known
 `edgesOut` error during dependency updates, use npm 11.6.2 temporarily with
 Node 22.15.0, for example `npx --yes npm@11.6.2 install --package-lock-only`.
 
-With the local backend and PostgreSQL running, manually check all six direct
+With the local backend and PostgreSQL running, manually check all five direct
 page URLs and reloads, root redirect, browser back/forward, account creation and
 existing-key reconnection, private plan creation/update, account plan changes,
 user list/create/details/plan changes, and invalid-key HTTP 401 display through
 the Vite `/api` proxy. Also verify accepted and rejected consumption, replay with
 unchanged counters, record ordering/pagination/details, and connection changes.
-Translation remains independent of real backend accounts.
+Verify the former `/translation` redirect to `/consumption`, too.
 
-For this integration, browser verification against the running local backend and
-PostgreSQL exercised accepted/rejected decisions, rejection counters, exact-payload
-replay after form edits, record pagination/details/order, and session changes.
-Browser interception additionally simulated a lost response after a real commit,
-a usage-refresh failure, and delayed user-usage responses; these simulated transport
-conditions are distinct from actual backend outages. No frontend automated test
-files, runners, or dependencies were added.
+For this refactor, browser verification against the running local backend and
+PostgreSQL exercised account creation/key connection, public/owned plans, private
+plan creation/update, account plan changes, and user creation/details/plan changes.
+It also covered manual and text consumption, English/Arabic/whitespace/empty counts,
+accepted and rejected decisions, unchanged rejection counters, exact replay after
+editing text/user/units, no new record or increment on replay, Records pagination,
+details/order, direct routes/reloads, root and former Translation redirects,
+back/forward navigation, and session changes.
+
+Browser interception additionally simulated a lost response after a real committed
+write, a usage-refresh failure, a held consumption response (shared pending guard),
+delayed user-usage responses, and an old write response arriving after an account
+switch; these conditions are distinct from actual backend
+outages. Typecheck, lint, build, and `npm audit` passed (zero vulnerabilities).
+Dependencies and the npm lockfile were unchanged, so no new installation was needed.
+No frontend automated test files, runners, or dependencies were added.
 
 Lint retains seven pre-existing Fast Refresh warnings; the production build
 retains a large-chunk warning. TypeScript strictness is unchanged. Automated

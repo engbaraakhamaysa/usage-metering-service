@@ -1,6 +1,6 @@
 import { useSession } from "@/context/session";
 
-/** Connected pages opt into HTTP; legacy pages continue using the mock API. */
+/** The authenticated HTTP client and the current in-memory connection. */
 export function useBackendSession() {
   const session = useSession();
   return { ...session, api: session.backendApi };

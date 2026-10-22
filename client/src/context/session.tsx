@@ -1,13 +1,11 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { ConsumeRequest } from "@/types";
-import type { ApiClient } from "@/api/client";
 import {
   createHttpApi,
   normalizeBaseUrl,
   type ManagementApi,
   type ConsumptionDecision,
 } from "@/api/http";
-import { createMockApi } from "@/mocks/mockApi";
 
 export type ConsumptionInput =
   | { readonly mode: "manual"; readonly request: Readonly<ConsumeRequest> }
@@ -19,7 +17,6 @@ export type ConsumptionAttempt = ConsumptionInput & {
 };
 
 interface SessionValue {
-  api: ApiClient;
   backendApi: ManagementApi;
   consumptionAttempt: ConsumptionAttempt | null;
   setConsumptionAttempt: (value: ConsumptionAttempt | null) => void;
@@ -62,12 +59,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => createHttpApi({ baseUrl, apiKey }, globalThis.fetch, controller.signal),
     [baseUrl, apiKey, controller],
   );
-  // Snapshot mock credentials too: a delayed mock operation must not switch accounts midway.
-  const api = useMemo(() => createMockApi(() => ({ baseUrl, apiKey })), [baseUrl, apiKey]);
   return (
     <SessionContext.Provider
       value={{
-        api,
         backendApi,
         consumptionAttempt,
         setConsumptionAttempt,
