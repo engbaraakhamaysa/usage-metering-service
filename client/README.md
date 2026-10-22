@@ -24,31 +24,40 @@ Lovable Vite wrapper have been removed. `src/main.tsx` mounts the app;
 metadata and the original IBM Plex fonts. Google Fonts requires network access;
 offline browsers use fallback fonts.
 
-Use Node.js 22.15.0 (`.nvmrc`; dependencies require Node >=22.12) and Bun 1.4.3.
+Use Node.js 22.15.0 (`.nvmrc`; dependencies require Node >=22.12) and npm 10.9.2
+(bundled with that Node version).
 Run commands from `client/`, independently of the backend's root npm project:
 
 ```sh
-bun install --frozen-lockfile
-bun run dev --host 127.0.0.1 --port 3100
+npm ci
+npm run dev -- --host 127.0.0.1 --port 3100
 ```
 
 Required validation:
 
 ```sh
-bun run typecheck
-bun run lint
-bun run test
-bun run build
+npm run typecheck
+npm run lint
+npm run test
+npm run build
 ```
 
 The production build is static files in `dist/`. To inspect it locally:
 
 ```sh
-bun run preview --host 127.0.0.1 --port 3100
+npm run preview -- --host 127.0.0.1 --port 3100
 ```
 
 Vite preview is a local inspection tool, not production hosting. No frontend
 SSR process, database, environment file, or translation provider is required.
+
+Frontend dependencies are locked in `client/package-lock.json`; use `npm ci`
+for a clean, repeatable installation. The frontend and backend keep separate
+manifests and lockfiles; no workspaces are configured. The migration preserves
+the existing dependency versions and integrity hashes. Bun configuration and
+runtime requirements are removed. The former Bun-specific minimum release age
+setting has no equivalent in npm 10; dependency updates should be reviewed
+separately from locked installs.
 
 ## Routes and design
 
@@ -68,7 +77,7 @@ Vite proxies `/api` to `http://127.0.0.1:3000`. Override that development target
 with a non-secret URL when needed:
 
 ```sh
-BACKEND_PROXY_TARGET=http://127.0.0.1:3001 bun run dev --host 127.0.0.1 --port 3100
+BACKEND_PROXY_TARGET=http://127.0.0.1:3001 npm run dev -- --host 127.0.0.1 --port 3100
 ```
 
 On Account, leave **API Base URL** blank for same-origin requests. To use a
