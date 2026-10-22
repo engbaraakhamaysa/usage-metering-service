@@ -43,18 +43,27 @@ export function NeedsApiKey() {
       <AlertTitle>No API key connected</AlertTitle>
       <AlertDescription>
         Create an account or enter an API key on the{" "}
-        <Link to="/account" className="underline font-medium">Account</Link> page.
+        <Link to="/account" className="underline font-medium">
+          Account
+        </Link>{" "}
+        page.
       </AlertDescription>
     </Alert>
   );
 }
 
 export function DecisionBadge({ accepted }: { accepted: boolean }) {
-  return <Badge variant={accepted ? "success" : "warning"}>{accepted ? "Accepted" : "Rejected"}</Badge>;
+  return (
+    <Badge variant={accepted ? "success" : "warning"}>{accepted ? "Accepted" : "Rejected"}</Badge>
+  );
 }
 
 export function ReasonText({ reason }: { reason: RejectionReason | null }) {
-  return reason ? <code className="font-mono text-xs">{reason}</code> : <span className="text-muted-foreground">—</span>;
+  return reason ? (
+    <code className="font-mono text-xs">{reason}</code>
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );
 }
 
 export function PageHeader({ title, description }: { title: string; description?: string }) {
@@ -66,12 +75,30 @@ export function PageHeader({ title, description }: { title: string; description?
   );
 }
 
-export function Field({ label, htmlFor, error, hint, children }: { label: string; htmlFor: string; error?: string | null; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  htmlFor,
+  error,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor: string;
+  error?: string | null;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium">{label}</label>
+      <label htmlFor={htmlFor} className="text-sm font-medium">
+        {label}
+      </label>
       {children}
-      {error ? <p className="text-xs text-destructive">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
     </div>
   );
 }

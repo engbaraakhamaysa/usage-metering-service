@@ -39,10 +39,7 @@ export interface Usage {
 }
 
 export type RejectionReason =
-  | "account_request_limit"
-  | "account_monthly_limit"
-  | "user_request_limit"
-  | "user_monthly_limit";
+  "account_request_limit" | "account_monthly_limit" | "user_request_limit" | "user_monthly_limit";
 
 export interface ConsumeRequest {
   userId: string;

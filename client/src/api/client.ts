@@ -23,7 +23,9 @@ export interface CreatePlanInput {
   maxUnitsPerRequest: number;
 }
 
-export type UpdatePlanInput = Partial<Pick<CreatePlanInput, "name" | "monthlyAllowance" | "maxUnitsPerRequest">>;
+export type UpdatePlanInput = Partial<
+  Pick<CreatePlanInput, "name" | "monthlyAllowance" | "maxUnitsPerRequest">
+>;
 
 /**
  * Mirrors the backend contract. Swap the mock implementation for an HTTP one

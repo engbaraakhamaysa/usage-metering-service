@@ -2,8 +2,18 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { BarChart3, Gauge, Languages, Layers, ListOrdered, UserCircle, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader,
-  SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/context/session";
@@ -20,7 +30,10 @@ const groups = [
       { title: "Records", url: "/records", icon: ListOrdered },
     ],
   },
-  { label: "Translation Demo", items: [{ title: "Translation", url: "/translation", icon: Languages }] },
+  {
+    label: "Translation Demo",
+    items: [{ title: "Translation", url: "/translation", icon: Languages }],
+  },
 ] as const;
 
 export function AppLayout({ children }: { children: ReactNode }) {
