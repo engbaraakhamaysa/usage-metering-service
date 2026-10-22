@@ -1,5 +1,5 @@
 import { AlertTriangle, Inbox, KeyRound, Loader2, WifiOff } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

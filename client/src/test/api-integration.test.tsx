@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
+import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
 import { SessionProvider, useSession } from "@/context/session";
 import { AccountPage } from "@/pages/account/AccountPage";
@@ -52,21 +47,16 @@ function mount(page: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const route = createRootRoute({
-    component: () => (
+  render(
+    <MemoryRouter>
       <QueryClientProvider client={client}>
         <SessionProvider>
           <SessionControls />
           {page}
         </SessionProvider>
       </QueryClientProvider>
-    ),
-  });
-  const router = createRouter({
-    routeTree: route,
-    history: createMemoryHistory({ initialEntries: ["/"] }),
-  });
-  render(<RouterProvider router={router} />);
+    </MemoryRouter>,
+  );
   return client;
 }
 async function connect() {
