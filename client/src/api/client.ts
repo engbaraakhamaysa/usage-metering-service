@@ -3,11 +3,8 @@ import type {
   ConsumeRequest,
   ConsumeResult,
   CreateAccountResponse,
-  Paginated,
   Plan,
   PlanType,
-  Usage,
-  UsageRecord,
   User,
 } from "@/types";
 
@@ -44,9 +41,5 @@ export interface ApiClient {
   createUser(input: { name: string; planId: string }): Promise<User>; // POST /api/users
   getUser(id: string): Promise<User>; // GET /api/users/:id
   updateUserPlan(id: string, planId: string): Promise<User>; // PATCH /api/users/:id/plan
-  getAccountUsage(month?: string): Promise<Usage>; // GET /api/usage/account
-  getUserUsage(userId: string, month?: string): Promise<Usage>; // GET /api/usage/users/:userId
   consume(input: ConsumeRequest): Promise<ConsumeResult>; // POST /api/usage/consume
-  listRecords(page: number, limit: number): Promise<Paginated<UsageRecord>>; // GET /api/usage/records
-  getRecord(id: string): Promise<UsageRecord>; // GET /api/usage/records/:id
 }

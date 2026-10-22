@@ -6,7 +6,6 @@ import type {
   Plan,
   PlanType,
   RejectionReason,
-  Usage,
   UsageRecord,
   User,
 } from "@/types";
@@ -113,32 +112,6 @@ export function createMockApi(getConfig: () => ApiConfig): ApiClient {
           (!userId || r.userId === userId),
       )
       .reduce((s, r) => s + r.requestedUnits, 0);
-  const usage = (
-    accountId: string,
-    plan: Plan,
-    month: string | undefined,
-    userId?: string,
-  ): Usage => {
-    const m = month ?? currentMonth();
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(m)) validation("Invalid month");
-    if (m > currentMonth()) validation("Month cannot be in the future");
-    const u = used(accountId, m, userId);
-    return {
-      usedUnits: u,
-      remainingUnits: m === currentMonth() ? Math.max(plan.monthlyAllowance - u, 0) : null,
-      currentPlan: plan,
-      periodStart: `${m}-01T00:00:00.000Z`,
-    };
-  };
-  const strip = (r: StoredRecord): UsageRecord => ({
-    id: r.id,
-    requestId: r.requestId,
-    userId: r.userId,
-    requestedUnits: r.requestedUnits,
-    status: r.status,
-    rejectionReason: r.rejectionReason,
-    createdAt: r.createdAt,
-  });
   const stripUser = ({ accountId: _a, ...u }: User & { accountId: string }): User => u;
 
   return {
@@ -222,24 +195,6 @@ export function createMockApi(getConfig: () => ApiConfig): ApiClient {
         u.planId = planId;
         return stripUser(u);
       }),
-    getAccountUsage: (month) =>
-      call(true, (accId) =>
-        usage(
-          accId,
-          plans.find((p) => p.id === getAccount(accId).planId)!,
-          month,
-        ),
-      ),
-    getUserUsage: (userId, month) =>
-      call(true, (accId) => {
-        const u = findUser(accId, userId);
-        return usage(
-          accId,
-          plans.find((p) => p.id === u.planId)!,
-          month,
-          userId,
-        );
-      }),
     consume: ({ userId, requestId, requestedUnits }) =>
       call(true, (accId) => {
         if (!isPosInt(requestedUnits))
@@ -280,27 +235,6 @@ export function createMockApi(getConfig: () => ApiConfig): ApiClient {
           createdAt: new Date().toISOString(),
         });
         return result;
-      }),
-    listRecords: (page, limit) =>
-      call(true, (accId) => {
-        if (!isPosInt(page) || ![10, 25, 50, 100].includes(limit)) validation("Invalid pagination");
-        const mine = records
-          .filter((r) => r.accountId === accId)
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.seq - a.seq);
-        const total = mine.length;
-        return {
-          data: mine.slice((page - 1) * limit, page * limit).map(strip),
-          page,
-          limit,
-          total,
-          totalPages: Math.max(1, Math.ceil(total / limit)),
-        };
-      }),
-    getRecord: (id) =>
-      call(true, (accId) => {
-        const r = records.find((x) => x.id === id && x.accountId === accId);
-        if (!r) throw new ApiError(404, { error: "Record not found" });
-        return strip(r);
       }),
   };
 }

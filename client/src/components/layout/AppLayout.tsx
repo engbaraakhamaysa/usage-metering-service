@@ -74,12 +74,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background px-4">
           <SidebarTrigger />
           <Badge variant="demo">
-            {["/account", "/plans", "/users", "/consumption"].includes(path)
+            {["/account", "/plans", "/users", "/consumption", "/records"].includes(path)
               ? "Backend API"
               : "Demo mode · mock data"}
           </Badge>
           <span className="hidden text-xs text-muted-foreground xl:inline">
-            Records and Translation are mocks; real accounts are not shared.
+            Translation is simulated; its mock accounts are separate.
           </span>
           <span className="ml-auto text-xs text-muted-foreground font-mono">
             {apiKey ? `x-api-key: ${maskKey(apiKey)}` : "Not connected"}

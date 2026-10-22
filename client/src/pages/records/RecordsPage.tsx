@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Paginated, UsageRecord } from "@/types";
+import type { BackendRecord, BackendRecords } from "@/api/http";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -27,16 +27,18 @@ import {
   PageHeader,
   ReasonText,
 } from "@/components/ui/states";
-import { useSession } from "@/context/session";
+import { useBackendSession } from "@/api/use-backend-session";
 import { formatDate } from "@/utils";
 
 const SIZES = [10, 25, 50, 100] as const;
 
 function RecordDetails({ id }: { id: string }) {
-  const { api, connectionSignal } = useSession();
-  const [r, setRecord] = useState<{ data: UsageRecord | null; isLoading: boolean; error: unknown }>(
-    { data: null, isLoading: true, error: null },
-  );
+  const { api, connectionSignal } = useBackendSession();
+  const [r, setRecord] = useState<{
+    data: BackendRecord | null;
+    isLoading: boolean;
+    error: unknown;
+  }>({ data: null, isLoading: true, error: null });
   useEffect(() => {
     let current = true;
     api.getRecord(id).then(
@@ -61,6 +63,8 @@ function RecordDetails({ id }: { id: string }) {
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
       <dt className="text-muted-foreground">id</dt>
       <dd className="font-mono text-xs break-all">{d.id}</dd>
+      <dt className="text-muted-foreground">accountId</dt>
+      <dd className="font-mono text-xs break-all">{d.accountId}</dd>
       <dt className="text-muted-foreground">requestId</dt>
       <dd className="font-mono text-xs break-all">{d.requestId}</dd>
       <dt className="text-muted-foreground">status</dt>
@@ -82,16 +86,16 @@ function RecordDetails({ id }: { id: string }) {
 }
 
 export function RecordsPage() {
-  const { connectionId } = useSession();
+  const { connectionId } = useBackendSession();
   return <RecordsContent key={connectionId} />;
 }
 function RecordsContent() {
-  const { api, apiKey, connectionSignal } = useSession();
+  const { api, apiKey, connectionSignal } = useBackendSession();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState<number>(10);
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setRecords] = useState<{
-    data: Paginated<UsageRecord> | null;
+    data: BackendRecords | null;
     isLoading: boolean;
     error: unknown;
   }>({ data: null, isLoading: !!apiKey, error: null });
@@ -155,7 +159,7 @@ function RecordsContent() {
             <LoadingState />
           ) : q.error ? (
             <ErrorState error={q.error} />
-          ) : !q.data?.data.length ? (
+          ) : !q.data?.records.length ? (
             <EmptyState title="No records yet">
               Submit a consumption request to create one.
             </EmptyState>
@@ -173,7 +177,7 @@ function RecordsContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {q.data.data.map((r) => (
+                  {q.data.records.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell>
                         <DecisionBadge accepted={r.status === "accepted"} />
@@ -200,7 +204,8 @@ function RecordsContent() {
           {q.data && (
             <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
               <span className="text-muted-foreground">
-                Total {q.data.total} · Page {q.data.page} of {q.data.totalPages}
+                Total {q.data.pagination.total} · Page {q.data.pagination.page} of{" "}
+                {q.data.pagination.totalPages}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -214,7 +219,7 @@ function RecordsContent() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={page >= q.data.totalPages || q.isLoading}
+                  disabled={page >= q.data.pagination.totalPages || q.isLoading}
                   onClick={() => setPage((p) => p + 1)}
                 >
                   Next
