@@ -78,7 +78,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               ? "Backend API"
               : "Demo mode · mock data"}
           </Badge>
-          <span className="text-xs text-muted-foreground">
+          <span className="hidden text-xs text-muted-foreground xl:inline">
             Consumption, Records, Translation: mocks; real accounts are not shared.
           </span>
           <span className="ml-auto text-xs text-muted-foreground font-mono">
