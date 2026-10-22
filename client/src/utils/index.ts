@@ -14,9 +14,9 @@ export function parsePositiveInt(value: string): number | null {
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
-/** Nonempty whitespace-separated tokens. */
-export function countWords(text: string): number {
-  return text.split(/\s+/).filter(Boolean).length;
+/** Unicode code points, including all whitespace (not grapheme clusters). */
+export function countCharacters(text: string): number {
+  return Array.from(text).length;
 }
 
 export function formatDate(iso: string): string {

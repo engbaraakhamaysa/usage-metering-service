@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BarChart3, Gauge, Languages, Layers, ListOrdered, UserCircle, Users } from "lucide-react";
+import { BarChart3, Gauge, Layers, ListOrdered, UserCircle, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   Sidebar,
@@ -29,10 +29,6 @@ const groups = [
       { title: "Consumption", url: "/consumption", icon: Gauge },
       { title: "Records", url: "/records", icon: ListOrdered },
     ],
-  },
-  {
-    label: "Translation Demo",
-    items: [{ title: "Translation", url: "/translation", icon: Languages }],
   },
 ] as const;
 
@@ -73,14 +69,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background px-4">
           <SidebarTrigger />
-          <Badge variant="demo">
-            {["/account", "/plans", "/users"].includes(path)
-              ? "Backend API"
-              : "Demo mode · mock data"}
-          </Badge>
-          <span className="hidden text-xs text-muted-foreground xl:inline">
-            Consumption, Records, Translation: mocks; real accounts are not shared.
-          </span>
+          <Badge variant="demo">Backend API</Badge>
           <span className="ml-auto text-xs text-muted-foreground font-mono">
             {apiKey ? `x-api-key: ${maskKey(apiKey)}` : "Not connected"}
           </span>
