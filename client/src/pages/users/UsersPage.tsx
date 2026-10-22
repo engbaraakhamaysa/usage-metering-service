@@ -27,23 +27,29 @@ import {
   NeedsApiKey,
   PageHeader,
 } from "@/components/ui/states";
-import { useSession } from "@/context/session";
+import { useBackendSession } from "@/api/use-backend-session";
 import { formatDate } from "@/utils";
 import type { Plan } from "@/types";
 
 function useUserPlans() {
-  const { api, apiKey } = useSession();
+  const { api, apiKey, backendScope } = useBackendSession();
   const pub = useQuery({
-    queryKey: ["plans", "public", "user"],
+    queryKey: [...backendScope, "plans", "public", "user"],
+    retry: false,
     queryFn: () => api.listPublicPlans("user"),
   });
   const mine = useQuery({
-    queryKey: ["plans", "me", "user", apiKey],
+    queryKey: [...backendScope, "plans", "me", "user"],
+    retry: false,
     queryFn: () => api.listMyPlans("user"),
     enabled: !!apiKey,
   });
-  const plans: Plan[] = [...(pub.data ?? []), ...(mine.data ?? [])];
-  return { plans, error: pub.error ?? mine.error };
+  const plans: Plan[] = apiKey ? (mine.data ?? []) : (pub.data ?? []);
+  return {
+    plans,
+    error: pub.error ?? mine.error,
+    loading: pub.isLoading || (!!apiKey && mine.isLoading),
+  };
 }
 
 function PlanSelect({
@@ -74,12 +80,17 @@ function PlanSelect({
 }
 
 function UserDetails({ id }: { id: string }) {
-  const { api, apiKey } = useSession();
+  const { api, apiKey, backendScope } = useBackendSession();
   const qc = useQueryClient();
-  const { plans } = useUserPlans();
-  const user = useQuery({ queryKey: ["user", id, apiKey], queryFn: () => api.getUser(id) });
+  const { plans, error: plansError, loading: plansLoading } = useUserPlans();
+  const user = useQuery({
+    queryKey: [...backendScope, "user", id],
+    retry: false,
+    queryFn: () => api.getUser(id),
+  });
   const [planId, setPlanId] = useState("");
   const change = useMutation({
+    mutationKey: ["backend", "user-plan"],
     mutationFn: () => api.updateUserPlan(id, planId),
     onSuccess: () => {
       setPlanId("");
@@ -102,6 +113,8 @@ function UserDetails({ id }: { id: string }) {
         <dt className="text-muted-foreground">Created</dt>
         <dd>{formatDate(user.data.createdAt)}</dd>
       </dl>
+      {plansLoading && <LoadingState label="Loading user plans…" />}
+      {plansError && <ErrorState error={plansError} />}
       <form
         className="space-y-2"
         onSubmit={(e) => {
@@ -121,21 +134,35 @@ function UserDetails({ id }: { id: string }) {
             onChange={setPlanId}
           />
         </Field>
-        <Button type="submit" disabled={!planId || change.isPending}>
+        <Button
+          type="submit"
+          disabled={!planId || change.isPending || plansLoading || !!plansError}
+        >
           {change.isPending ? "Saving…" : "Change plan"}
         </Button>
       </form>
+      {change.isSuccess && (
+        <p role="status" className="text-sm text-muted-foreground">
+          User plan updated.
+        </p>
+      )}
       {change.error && <ErrorState error={change.error} />}
     </div>
   );
 }
 
 export function UsersPage() {
-  const { api, apiKey } = useSession();
+  const { backendScope } = useBackendSession();
+  return <ConnectedUsersPage key={JSON.stringify(backendScope)} />;
+}
+
+function ConnectedUsersPage() {
+  const { api, apiKey, backendScope } = useBackendSession();
   const qc = useQueryClient();
-  const { plans, error: plansError } = useUserPlans();
+  const { plans, error: plansError, loading: plansLoading } = useUserPlans();
   const users = useQuery({
-    queryKey: ["users", apiKey],
+    queryKey: [...backendScope, "users"],
+    retry: false,
     queryFn: api.listUsers,
     enabled: !!apiKey,
   });
@@ -143,10 +170,12 @@ export function UsersPage() {
   const [planId, setPlanId] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const create = useMutation({
+    mutationKey: ["backend", "create-user"],
     mutationFn: () => api.createUser({ name, planId }),
     onSuccess: () => {
       setName("");
-      qc.invalidateQueries({ queryKey: ["users"] });
+      setPlanId("");
+      qc.invalidateQueries({ queryKey: [...backendScope, "users"] });
     },
   });
 
@@ -178,16 +207,35 @@ export function UsersPage() {
             }}
           >
             <Field label="Name" htmlFor="u-name">
-              <Input id="u-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                maxLength={255}
+                id="u-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </Field>
             <Field label="User plan" htmlFor="u-plan">
-              <PlanSelect id="u-plan" plans={plans} value={planId} onChange={setPlanId} />
+              {plansLoading ? (
+                <LoadingState label="Loading user plans…" />
+              ) : !plans.length && !plansError ? (
+                <EmptyState title="No user plans available" />
+              ) : (
+                <PlanSelect id="u-plan" plans={plans} value={planId} onChange={setPlanId} />
+              )}
             </Field>
-            <Button type="submit" disabled={!name.trim() || !planId || create.isPending}>
+            <Button
+              type="submit"
+              disabled={!name.trim() || !planId || create.isPending || plansLoading || !!plansError}
+            >
               {create.isPending ? "Creating…" : "Create user"}
             </Button>
           </form>
           {plansError && <ErrorState error={plansError} />}
+          {create.isSuccess && (
+            <p role="status" className="text-sm text-muted-foreground">
+              User created.
+            </p>
+          )}
           {create.error && <ErrorState error={create.error} />}
         </CardContent>
       </Card>

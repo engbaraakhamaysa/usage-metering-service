@@ -34,11 +34,11 @@ import {
   NeedsApiKey,
   PageHeader,
 } from "@/components/ui/states";
-import { useSession } from "@/context/session";
+import { useBackendSession } from "@/api/use-backend-session";
 import { parsePositiveInt } from "@/utils";
 import type { Plan, PlanType } from "@/types";
 
-const LIMIT_ERR = "Must be a positive integer";
+const LIMIT_ERR = "Must be an integer from 1 to 2147483647";
 
 function PlanForm({
   initial,
@@ -46,6 +46,7 @@ function PlanForm({
   pending,
   submitLabel,
   withType,
+  idPrefix = "pf",
 }: {
   initial: {
     name: string;
@@ -62,12 +63,14 @@ function PlanForm({
   pending: boolean;
   submitLabel: string;
   withType: boolean;
+  idPrefix?: string;
 }) {
   const [v, setV] = useState(initial);
   const [touched, setTouched] = useState(false);
   const ma = parsePositiveInt(v.monthlyAllowance);
   const mr = parsePositiveInt(v.maxUnitsPerRequest);
-  const valid = !!v.name.trim() && ma !== null && mr !== null;
+  const valid =
+    !!v.name.trim() && ma !== null && mr !== null && ma <= 2_147_483_647 && mr <= 2_147_483_647;
   return (
     <form
       className="grid gap-4 md:grid-cols-2"
@@ -83,13 +86,22 @@ function PlanForm({
           });
       }}
     >
-      <Field label="Name" htmlFor="pf-name" error={touched && !v.name.trim() ? "Required" : null}>
-        <Input id="pf-name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
+      <Field
+        label="Name"
+        htmlFor={`${idPrefix}-name`}
+        error={touched && !v.name.trim() ? "Required" : null}
+      >
+        <Input
+          maxLength={255}
+          id={`${idPrefix}-name`}
+          value={v.name}
+          onChange={(e) => setV({ ...v, name: e.target.value })}
+        />
       </Field>
       {withType && (
-        <Field label="Plan type" htmlFor="pf-type">
+        <Field label="Plan type" htmlFor={`${idPrefix}-type`}>
           <Select value={v.planType} onValueChange={(t) => setV({ ...v, planType: t as PlanType })}>
-            <SelectTrigger id="pf-type">
+            <SelectTrigger id={`${idPrefix}-type`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -101,11 +113,11 @@ function PlanForm({
       )}
       <Field
         label="Monthly allowance"
-        htmlFor="pf-ma"
-        error={touched && ma === null ? LIMIT_ERR : null}
+        htmlFor={`${idPrefix}-ma`}
+        error={touched && (ma === null || ma > 2_147_483_647) ? LIMIT_ERR : null}
       >
         <Input
-          id="pf-ma"
+          id={`${idPrefix}-ma`}
           inputMode="numeric"
           value={v.monthlyAllowance}
           onChange={(e) => setV({ ...v, monthlyAllowance: e.target.value })}
@@ -113,11 +125,11 @@ function PlanForm({
       </Field>
       <Field
         label="Max units per request"
-        htmlFor="pf-mr"
-        error={touched && mr === null ? LIMIT_ERR : null}
+        htmlFor={`${idPrefix}-mr`}
+        error={touched && (mr === null || mr > 2_147_483_647) ? LIMIT_ERR : null}
       >
         <Input
-          id="pf-mr"
+          id={`${idPrefix}-mr`}
           inputMode="numeric"
           value={v.maxUnitsPerRequest}
           onChange={(e) => setV({ ...v, maxUnitsPerRequest: e.target.value })}
@@ -133,7 +145,12 @@ function PlanForm({
 }
 
 export function PlansPage() {
-  const { api, apiKey } = useSession();
+  const { backendScope } = useBackendSession();
+  return <ConnectedPlansPage key={JSON.stringify(backendScope)} />;
+}
+
+function ConnectedPlansPage() {
+  const { api, apiKey, backendScope } = useBackendSession();
   const qc = useQueryClient();
   const [filter, setFilter] = useState<"all" | PlanType>("all");
   const [editing, setEditing] = useState<Plan | null>(null);
@@ -141,22 +158,26 @@ export function PlansPage() {
   const pt = filter === "all" ? undefined : filter;
 
   const pub = useQuery({
-    queryKey: ["plans", "public", pt],
+    queryKey: [...backendScope, "plans", "public", pt],
+    retry: false,
     queryFn: () => api.listPublicPlans(pt),
   });
   const mine = useQuery({
-    queryKey: ["plans", "me", pt, apiKey],
+    queryKey: [...backendScope, "plans", "me", pt],
+    retry: false,
     queryFn: () => api.listMyPlans(pt),
     enabled: !!apiKey,
   });
   const create = useMutation({
+    mutationKey: ["backend", "create-plan"],
     mutationFn: api.createPlan,
     onSuccess: () => {
       setFormKey((k) => k + 1);
-      qc.invalidateQueries({ queryKey: ["plans"] });
+      qc.invalidateQueries({ queryKey: [...backendScope, "plans"] });
     },
   });
   const update = useMutation({
+    mutationKey: ["backend", "update-plan"],
     mutationFn: (v: {
       id: string;
       name: string;
@@ -174,7 +195,7 @@ export function PlansPage() {
     },
   });
 
-  const rows: Plan[] = [...(pub.data ?? []), ...(mine.data ?? [])];
+  const rows: Plan[] = apiKey ? (mine.data ?? []) : (pub.data ?? []);
   const loading = pub.isLoading || (!!apiKey && mine.isLoading);
   const error = pub.error ?? mine.error;
 
@@ -289,12 +310,22 @@ export function PlansPage() {
                 }}
                 onSubmit={(v) => create.mutate(v)}
               />
+              {create.isSuccess && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Private plan created.
+                </p>
+              )}
               {create.error && <ErrorState error={create.error} />}
             </>
           )}
         </CardContent>
       </Card>
 
+      {update.isSuccess && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Private plan updated.
+        </p>
+      )}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
@@ -302,6 +333,7 @@ export function PlansPage() {
           </DialogHeader>
           {editing && (
             <PlanForm
+              idPrefix="edit-pf"
               key={editing.id}
               withType={false}
               submitLabel="Save changes"

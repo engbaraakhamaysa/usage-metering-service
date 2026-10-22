@@ -28,8 +28,8 @@ export type UpdatePlanInput = Partial<
 >;
 
 /**
- * Mirrors the backend contract. Swap the mock implementation for an HTTP one
- * (fetch + x-api-key header) without touching pages.
+ * UI-facing models shared with the legacy mock implementation. The HTTP
+ * management client explicitly adapts backend wire responses to these models.
  */
 export interface ApiClient {
   // public
