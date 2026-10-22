@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,56 +13,72 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { ErrorState, Field, LoadingState, NeedsApiKey, PageHeader } from "@/components/ui/states";
-import { useSession } from "@/context/session";
-import { mockControls } from "@/mocks/mockApi";
+import {
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  NeedsApiKey,
+  PageHeader,
+} from "@/components/ui/states";
+import { useBackendSession } from "@/api/use-backend-session";
+import { normalizeBaseUrl } from "@/api/http";
 
 export function AccountPage() {
-  const { api, apiKey, setApiKey, baseUrl, setBaseUrl } = useSession();
+  const { api, apiKey, setApiKey, baseUrl, setBaseUrl, backendScope } = useBackendSession();
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [planId, setPlanId] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [keyInput, setKeyInput] = useState("");
-  const [netFail, setNetFail] = useState(mockControls.simulateNetworkFailure);
+  const [urlInput, setUrlInput] = useState(baseUrl);
+  const [urlError, setUrlError] = useState<Error | null>(null);
+  const pendingConnection = useIsMutating({ mutationKey: ["backend"] }) > 0;
 
   const publicPlans = useQuery({
-    queryKey: ["plans", "public", "account"],
+    queryKey: [...backendScope, "plans", "public", "account"],
+    retry: false,
     queryFn: () => api.listPublicPlans("account"),
   });
   const myPlans = useQuery({
-    queryKey: ["plans", "me", "account", apiKey],
+    queryKey: [...backendScope, "plans", "me", "account"],
+    retry: false,
     queryFn: () => api.listMyPlans("account"),
     enabled: !!apiKey,
   });
   const usage = useQuery({
-    queryKey: ["usage", "account", apiKey, ""],
-    queryFn: () => api.getAccountUsage(),
+    queryKey: [...backendScope, "account-plan"],
+    retry: false,
+    queryFn: () => api.getAccountPlan(),
     enabled: !!apiKey,
   });
 
   const create = useMutation({
+    mutationKey: ["backend", "create-account"],
     mutationFn: () => api.createAccount({ name, planId }),
     onSuccess: (res) => {
       setNewKey(res.apiKey);
       setApiKey(res.apiKey);
       setKeyInput(res.apiKey);
       setName("");
+      setSwitchTo("");
       qc.invalidateQueries();
     },
   });
   const [switchTo, setSwitchTo] = useState("");
   const switchPlan = useMutation({
+    mutationKey: ["backend", "account-plan"],
     mutationFn: () => api.updateAccountPlan(switchTo),
     onSuccess: () => {
       setSwitchTo("");
       qc.invalidateQueries();
     },
   });
+
+  const currentPlan = myPlans.data?.find((plan) => plan.id === usage.data?.id);
 
   const copy = async () => {
     if (!newKey) return;
@@ -97,6 +113,7 @@ export function AccountPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Acme Inc."
+                maxLength={255}
               />
             </Field>
             <Field label="Account plan" htmlFor="acc-plan">
@@ -104,6 +121,8 @@ export function AccountPage() {
                 <LoadingState />
               ) : publicPlans.error ? (
                 <ErrorState error={publicPlans.error} />
+              ) : !publicPlans.data?.length ? (
+                <EmptyState title="No public account plans" />
               ) : (
                 <Select value={planId} onValueChange={setPlanId}>
                   <SelectTrigger id="acc-plan">
@@ -157,9 +176,41 @@ export function AccountPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {urlError && <ErrorState error={urlError} />}
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="API Base URL" htmlFor="base-url" hint="Not used in demo mode.">
-              <Input id="base-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+            <Field
+              label="API Base URL"
+              htmlFor="base-url"
+              hint="Blank uses the same-origin /api proxy. Apply a URL before connecting a key."
+            >
+              <Input
+                id="base-url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                disabled={pendingConnection}
+              />
+              <Button
+                variant="outline"
+                disabled={pendingConnection}
+                onClick={() => {
+                  try {
+                    const url = normalizeBaseUrl(urlInput);
+                    setBaseUrl(url);
+                    setUrlInput(url);
+                    setUrlError(null);
+                    setNewKey(null);
+                    setKeyInput("");
+                    setPlanId("");
+                    setSwitchTo("");
+                    create.reset();
+                    switchPlan.reset();
+                  } catch (error) {
+                    setUrlError(error instanceof Error ? error : new Error("Invalid URL"));
+                  }
+                }}
+              >
+                Apply URL
+              </Button>
             </Field>
             <Field label="API key" htmlFor="api-key">
               <Input
@@ -175,34 +226,32 @@ export function AccountPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               onClick={() => {
+                setNewKey(null);
+                setSwitchTo("");
+                create.reset();
+                switchPlan.reset();
                 setApiKey(keyInput.trim() || null);
                 qc.invalidateQueries();
               }}
-              disabled={!keyInput.trim()}
+              disabled={!keyInput.trim() || pendingConnection}
             >
               Connect
             </Button>
             <Button
               variant="outline"
               onClick={() => {
+                setNewKey(null);
+                setSwitchTo("");
+                create.reset();
+                switchPlan.reset();
                 setApiKey(null);
                 setKeyInput("");
                 qc.clear();
               }}
-              disabled={!apiKey}
+              disabled={!apiKey || pendingConnection}
             >
               Disconnect
             </Button>
-            <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-              <Switch
-                checked={netFail}
-                onCheckedChange={(v) => {
-                  mockControls.simulateNetworkFailure = v;
-                  setNetFail(v);
-                }}
-              />
-              Simulate network failure
-            </label>
           </div>
         </CardContent>
       </Card>
@@ -215,21 +264,21 @@ export function AccountPage() {
         <CardContent className="space-y-4">
           {!apiKey ? (
             <NeedsApiKey />
-          ) : usage.isLoading ? (
+          ) : usage.isLoading || myPlans.isLoading ? (
             <LoadingState />
-          ) : usage.error ? (
-            <ErrorState error={usage.error} />
+          ) : usage.error || myPlans.error ? (
+            <ErrorState error={usage.error ?? myPlans.error} />
           ) : (
             usage.data && (
               <>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{usage.data.currentPlan.name}</span>
-                  <Badge variant={usage.data.currentPlan.isPublic ? "secondary" : "outline"}>
-                    {usage.data.currentPlan.isPublic ? "Public" : "Private"}
+                  <span className="font-medium">{usage.data.name}</span>
+                  <Badge variant={currentPlan?.isPublic ? "secondary" : "outline"}>
+                    {currentPlan?.isPublic ? "Public" : "Private"}
                   </Badge>
                   <span className="text-sm text-muted-foreground">
-                    {usage.data.currentPlan.monthlyAllowance} units/month · max{" "}
-                    {usage.data.currentPlan.maxUnitsPerRequest}/request
+                    {usage.data.monthlyAllowance} units/month · max {usage.data.maxUnitsPerRequest}
+                    /request
                   </span>
                 </div>
                 <form
@@ -247,27 +296,21 @@ export function AccountPage() {
                       <SelectGroup>
                         <SelectLabel>Public</SelectLabel>
                         {publicPlans.data?.map((p) => (
-                          <SelectItem
-                            key={p.id}
-                            value={p.id}
-                            disabled={p.id === usage.data.currentPlan.id}
-                          >
+                          <SelectItem key={p.id} value={p.id} disabled={p.id === usage.data.id}>
                             {p.name}
                           </SelectItem>
                         ))}
                       </SelectGroup>
-                      {!!myPlans.data?.length && (
+                      {!!myPlans.data?.some((p) => !p.isPublic) && (
                         <SelectGroup>
                           <SelectLabel>Private (yours)</SelectLabel>
-                          {myPlans.data.map((p) => (
-                            <SelectItem
-                              key={p.id}
-                              value={p.id}
-                              disabled={p.id === usage.data.currentPlan.id}
-                            >
-                              {p.name}
-                            </SelectItem>
-                          ))}
+                          {myPlans.data
+                            ?.filter((p) => !p.isPublic)
+                            .map((p) => (
+                              <SelectItem key={p.id} value={p.id} disabled={p.id === usage.data.id}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
                         </SelectGroup>
                       )}
                     </SelectContent>
@@ -276,6 +319,11 @@ export function AccountPage() {
                     {switchPlan.isPending ? "Saving…" : "Change plan"}
                   </Button>
                 </form>
+                {switchPlan.isSuccess && (
+                  <p role="status" className="text-sm text-muted-foreground">
+                    Account plan updated.
+                  </p>
+                )}
                 {switchPlan.error && <ErrorState error={switchPlan.error} />}
               </>
             )
