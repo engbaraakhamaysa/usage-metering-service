@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import type { Paginated, UsageRecord } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -33,8 +33,26 @@ import { formatDate } from "@/utils";
 const SIZES = [10, 25, 50, 100] as const;
 
 function RecordDetails({ id }: { id: string }) {
-  const { api, apiKey } = useSession();
-  const r = useQuery({ queryKey: ["record", id, apiKey], queryFn: () => api.getRecord(id) });
+  const { api, connectionSignal } = useSession();
+  const [r, setRecord] = useState<{ data: UsageRecord | null; isLoading: boolean; error: unknown }>(
+    { data: null, isLoading: true, error: null },
+  );
+  useEffect(() => {
+    let current = true;
+    api.getRecord(id).then(
+      (data) => {
+        if (current && !connectionSignal.aborted)
+          setRecord({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted)
+          setRecord({ data: null, isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, id, connectionSignal]);
   if (r.isLoading) return <LoadingState />;
   if (r.error) return <ErrorState error={r.error} />;
   if (!r.data) return null;
@@ -64,15 +82,37 @@ function RecordDetails({ id }: { id: string }) {
 }
 
 export function RecordsPage() {
-  const { api, apiKey } = useSession();
+  const { connectionId } = useSession();
+  return <RecordsContent key={connectionId} />;
+}
+function RecordsContent() {
+  const { api, apiKey, connectionSignal } = useSession();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState<number>(10);
   const [selected, setSelected] = useState<string | null>(null);
-  const q = useQuery({
-    queryKey: ["records", apiKey, page, limit],
-    queryFn: () => api.listRecords(page, limit),
-    enabled: !!apiKey,
-  });
+  const [q, setRecords] = useState<{
+    data: Paginated<UsageRecord> | null;
+    isLoading: boolean;
+    error: unknown;
+  }>({ data: null, isLoading: !!apiKey, error: null });
+  useEffect(() => {
+    if (!apiKey) return;
+    let current = true;
+    setRecords({ data: null, isLoading: true, error: null });
+    api.listRecords(page, limit).then(
+      (data) => {
+        if (current && !connectionSignal.aborted)
+          setRecords({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted)
+          setRecords({ data: null, isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal, page, limit]);
 
   if (!apiKey)
     return (
@@ -166,7 +206,7 @@ export function RecordsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={page <= 1 || q.isFetching}
+                  disabled={page <= 1 || q.isLoading}
                   onClick={() => setPage((p) => p - 1)}
                 >
                   Previous
@@ -174,7 +214,7 @@ export function RecordsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={page >= q.data.totalPages || q.isFetching}
+                  disabled={page >= q.data.totalPages || q.isLoading}
                   onClick={() => setPage((p) => p + 1)}
                 >
                   Next
@@ -189,7 +229,7 @@ export function RecordsPage() {
           <DialogHeader>
             <DialogTitle>Record details</DialogTitle>
           </DialogHeader>
-          {selected && <RecordDetails id={selected} />}
+          {selected && <RecordDetails key={selected} id={selected} />}
         </DialogContent>
       </Dialog>
     </div>

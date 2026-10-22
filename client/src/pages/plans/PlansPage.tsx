@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { usePageActive } from "@/hooks/use-page-active";
+import type { CreatePlanInput, UpdatePlanInput } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -145,59 +146,80 @@ function PlanForm({
 }
 
 export function PlansPage() {
-  const { backendScope } = useBackendSession();
-  return <ConnectedPlansPage key={JSON.stringify(backendScope)} />;
+  const { connectionId } = useBackendSession();
+  return <ConnectedPlansPage key={connectionId} />;
 }
 
 function ConnectedPlansPage() {
-  const { api, apiKey, backendScope } = useBackendSession();
-  const qc = useQueryClient();
+  const { api, apiKey, connectionId } = useBackendSession();
+  const active = usePageActive();
+  const { connectionSignal } = useBackendSession();
   const [filter, setFilter] = useState<"all" | PlanType>("all");
   const [editing, setEditing] = useState<Plan | null>(null);
   const [formKey, setFormKey] = useState(0);
-  const pt = filter === "all" ? undefined : filter;
-
-  const pub = useQuery({
-    queryKey: [...backendScope, "plans", "public", pt],
-    retry: false,
-    queryFn: () => api.listPublicPlans(pt),
+  const [refresh, setRefresh] = useState(0);
+  const [rows, setRows] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [create, setCreate] = useState({
+    isPending: false,
+    isSuccess: false,
+    error: null as unknown,
   });
-  const mine = useQuery({
-    queryKey: [...backendScope, "plans", "me", pt],
-    retry: false,
-    queryFn: () => api.listMyPlans(pt),
-    enabled: !!apiKey,
+  const [update, setUpdate] = useState({
+    isPending: false,
+    isSuccess: false,
+    error: null as unknown,
   });
-  const create = useMutation({
-    mutationKey: ["backend", "create-plan"],
-    mutationFn: api.createPlan,
-    onSuccess: () => {
-      setFormKey((k) => k + 1);
-      qc.invalidateQueries({ queryKey: [...backendScope, "plans"] });
-    },
-  });
-  const update = useMutation({
-    mutationKey: ["backend", "update-plan"],
-    mutationFn: (v: {
-      id: string;
-      name: string;
-      monthlyAllowance: number;
-      maxUnitsPerRequest: number;
-    }) =>
-      api.updatePlan(v.id, {
-        name: v.name,
-        monthlyAllowance: v.monthlyAllowance,
-        maxUnitsPerRequest: v.maxUnitsPerRequest,
-      }),
-    onSuccess: () => {
+  useEffect(() => {
+    let current = true;
+    setRows([]);
+    setLoading(true);
+    setError(null);
+    const type = filter === "all" ? undefined : filter;
+    const request = apiKey ? api.listMyPlans(type) : api.listPublicPlans(type);
+    request
+      .then(
+        (data) => {
+          if (current && !connectionSignal.aborted) setRows(data);
+        },
+        (cause: unknown) => {
+          if (current && !connectionSignal.aborted) setError(cause);
+        },
+      )
+      .finally(() => {
+        if (current && !connectionSignal.aborted) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal, filter, refresh]);
+  const createPlan = async (input: CreatePlanInput) => {
+    setCreate({ isPending: true, isSuccess: false, error: null });
+    try {
+      await api.createPlan(input);
+      if (!active.current || connectionSignal.aborted) return;
+      setCreate({ isPending: false, isSuccess: true, error: null });
+      setFormKey((value) => value + 1);
+      setRefresh((value) => value + 1);
+    } catch (cause) {
+      if (active.current && !connectionSignal.aborted)
+        setCreate({ isPending: false, isSuccess: false, error: cause });
+    }
+  };
+  const updatePlan = async (id: string, input: UpdatePlanInput) => {
+    setUpdate({ isPending: true, isSuccess: false, error: null });
+    try {
+      await api.updatePlan(id, input);
+      if (!active.current || connectionSignal.aborted) return;
+      setUpdate({ isPending: false, isSuccess: true, error: null });
       setEditing(null);
-      qc.invalidateQueries();
-    },
-  });
-
-  const rows: Plan[] = apiKey ? (mine.data ?? []) : (pub.data ?? []);
-  const loading = pub.isLoading || (!!apiKey && mine.isLoading);
-  const error = pub.error ?? mine.error;
+      setRefresh((value) => value + 1);
+    } catch (cause) {
+      if (active.current && !connectionSignal.aborted)
+        setUpdate({ isPending: false, isSuccess: false, error: cause });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -265,7 +287,7 @@ function ConnectedPlansPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              update.reset();
+                              setUpdate({ isPending: false, isSuccess: false, error: null });
                               setEditing(p);
                             }}
                           >
@@ -308,14 +330,14 @@ function ConnectedPlansPage() {
                   monthlyAllowance: "",
                   maxUnitsPerRequest: "",
                 }}
-                onSubmit={(v) => create.mutate(v)}
+                onSubmit={(v) => void createPlan(v)}
               />
               {create.isSuccess && (
                 <p role="status" className="text-sm text-muted-foreground">
                   Private plan created.
                 </p>
               )}
-              {create.error && <ErrorState error={create.error} />}
+              {Boolean(create.error) && <ErrorState error={create.error} />}
             </>
           )}
         </CardContent>
@@ -344,10 +366,16 @@ function ConnectedPlansPage() {
                 monthlyAllowance: String(editing.monthlyAllowance),
                 maxUnitsPerRequest: String(editing.maxUnitsPerRequest),
               }}
-              onSubmit={(v) => update.mutate({ id: editing.id, ...v })}
+              onSubmit={(v) =>
+                void updatePlan(editing.id, {
+                  name: v.name,
+                  monthlyAllowance: v.monthlyAllowance,
+                  maxUnitsPerRequest: v.maxUnitsPerRequest,
+                })
+              }
             />
           )}
-          {update.error && <ErrorState error={update.error} />}
+          {Boolean(update.error) && <ErrorState error={update.error} />}
           <DialogFooter />
         </DialogContent>
       </Dialog>

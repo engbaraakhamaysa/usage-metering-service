@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePageActive } from "@/hooks/use-page-active";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,7 @@ import {
 import { useSession } from "@/context/session";
 import { LANGUAGES, simulatedTranslator, type TranslationResult } from "@/api/translation";
 import { countWords, generateUuid } from "@/utils";
-import type { ConsumeResult } from "@/types";
+import type { ConsumeResult, User } from "@/types";
 
 interface Op {
   requestId: string;
@@ -38,13 +38,32 @@ interface Op {
 }
 
 export function TranslationPage() {
-  const { api, apiKey } = useSession();
-  const qc = useQueryClient();
-  const users = useQuery({
-    queryKey: ["users", apiKey],
-    queryFn: api.listUsers,
-    enabled: !!apiKey,
+  const { connectionId } = useSession();
+  return <TranslationContent key={connectionId} />;
+}
+function TranslationContent() {
+  const { api, apiKey, connectionSignal } = useSession();
+  const active = usePageActive();
+  const [users, setUsers] = useState<{ data: User[]; isLoading: boolean; error: unknown }>({
+    data: [],
+    isLoading: !!apiKey,
+    error: null,
   });
+  useEffect(() => {
+    if (!apiKey) return;
+    let current = true;
+    api.listUsers().then(
+      (data) => {
+        if (current && !connectionSignal.aborted) setUsers({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) setUsers({ data: [], isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal]);
   const [userId, setUserId] = useState("");
   const [text, setText] = useState("");
   const [source, setSource] = useState("en");
@@ -81,21 +100,24 @@ export function TranslationPage() {
         requestId: current.requestId,
         requestedUnits: words,
       });
+      if (!active.current || connectionSignal.aborted) return;
       setDecision(res);
-      qc.invalidateQueries({ queryKey: ["usage"] });
-      qc.invalidateQueries({ queryKey: ["records"] });
       if (!res.accepted) return;
       try {
-        setOutput(
-          await translator.translate({ text, sourceLanguage: source, targetLanguage: target }),
-        );
+        const result = await translator.translate({
+          text,
+          sourceLanguage: source,
+          targetLanguage: target,
+        });
+        if (active.current && !connectionSignal.aborted) setOutput(result);
       } catch (e) {
-        setTranslateError(e instanceof Error ? e.message : String(e));
+        if (active.current && !connectionSignal.aborted)
+          setTranslateError(e instanceof Error ? e.message : String(e));
       }
     } catch (e) {
-      setMeterError(e);
+      if (active.current && !connectionSignal.aborted) setMeterError(e);
     } finally {
-      setPending(false);
+      if (active.current && !connectionSignal.aborted) setPending(false);
     }
   };
 

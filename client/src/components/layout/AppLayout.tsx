@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useLocation } from "react-router-dom";
 import { BarChart3, Gauge, Languages, Layers, ListOrdered, UserCircle, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -37,7 +37,7 @@ const groups = [
 ] as const;
 
 export function AppLayout({ children }: { children: ReactNode }) {
-  const path = useRouterState({ select: (s) => s.location.pathname });
+  const { pathname: path } = useLocation();
   const { apiKey } = useSession();
   return (
     <SidebarProvider>

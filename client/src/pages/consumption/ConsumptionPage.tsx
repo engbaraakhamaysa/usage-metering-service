@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { usePageActive } from "@/hooks/use-page-active";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,31 +24,70 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useSession } from "@/context/session";
 import { currentMonth, formatDate, generateUuid, parsePositiveInt } from "@/utils";
-import type { ConsumeRequest, ConsumeResult } from "@/types";
+import type { ConsumeRequest, ConsumeResult, Usage, User } from "@/types";
 
 const ACCOUNT = "__account__";
 
 export function ConsumptionPage() {
-  const { api, apiKey } = useSession();
-  const qc = useQueryClient();
-  const users = useQuery({
-    queryKey: ["users", apiKey],
-    queryFn: api.listUsers,
-    enabled: !!apiKey,
+  const { connectionId } = useSession();
+  return <ConsumptionContent key={connectionId} />;
+}
+function ConsumptionContent() {
+  const { api, apiKey, connectionSignal } = useSession();
+  const active = usePageActive();
+  const [users, setUsers] = useState<{ data: User[]; isLoading: boolean; error: unknown }>({
+    data: [],
+    isLoading: !!apiKey,
+    error: null,
   });
-
   const [scope, setScope] = useState(ACCOUNT);
   const [month, setMonth] = useState("");
+  const [refresh, setRefresh] = useState(0);
   const maxMonth = currentMonth();
   const monthError = month && month > maxMonth ? "Future months are not allowed" : null;
-  const usage = useQuery({
-    queryKey: ["usage", scope, apiKey, month],
-    queryFn: () =>
+  const [usage, setUsage] = useState<{ data: Usage | null; isLoading: boolean; error: unknown }>({
+    data: null,
+    isLoading: !!apiKey,
+    error: null,
+  });
+  useEffect(() => {
+    if (!apiKey) return;
+    let current = true;
+    api.listUsers().then(
+      (data) => {
+        if (current && !connectionSignal.aborted) setUsers({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) setUsers({ data: [], isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal]);
+  useEffect(() => {
+    if (!apiKey || monthError) {
+      setUsage({ data: null, isLoading: false, error: null });
+      return;
+    }
+    let current = true;
+    setUsage({ data: null, isLoading: true, error: null });
+    const request =
       scope === ACCOUNT
         ? api.getAccountUsage(month || undefined)
-        : api.getUserUsage(scope, month || undefined),
-    enabled: !!apiKey && !monthError,
-  });
+        : api.getUserUsage(scope, month || undefined);
+    request.then(
+      (data) => {
+        if (current && !connectionSignal.aborted) setUsage({ data, isLoading: false, error: null });
+      },
+      (error: unknown) => {
+        if (current && !connectionSignal.aborted) setUsage({ data: null, isLoading: false, error });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [api, apiKey, connectionSignal, scope, month, monthError, refresh]);
 
   // operation state
   const [userId, setUserId] = useState("");
@@ -58,14 +97,19 @@ export function ConsumptionPage() {
   const parsedUnits = parsePositiveInt(units);
   const newOp = () => setRequestId(generateUuid());
 
-  const consume = useMutation({
-    mutationFn: (req: ConsumeRequest) => api.consume(req).then((result) => ({ req, result })),
-    onSuccess: (r) => {
-      setLast(r);
-      qc.invalidateQueries({ queryKey: ["usage"] });
-      qc.invalidateQueries({ queryKey: ["records"] });
-    },
-  });
+  const [consume, setConsume] = useState({ isPending: false, error: null as unknown });
+  const runConsume = async (req: ConsumeRequest) => {
+    setConsume({ isPending: true, error: null });
+    try {
+      const result = await api.consume(req);
+      if (!active.current || connectionSignal.aborted) return;
+      setLast({ req, result });
+      setConsume({ isPending: false, error: null });
+      setRefresh((value) => value + 1);
+    } catch (error) {
+      if (active.current && !connectionSignal.aborted) setConsume({ isPending: false, error });
+    }
+  };
 
   if (!apiKey)
     return (
@@ -172,7 +216,7 @@ export function ConsumptionPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (parsedUnits && userId)
-                  consume.mutate({ userId, requestId, requestedUnits: parsedUnits });
+                  runConsume({ userId, requestId, requestedUnits: parsedUnits });
               }}
             >
               <Field label="userId" htmlFor="c-user">
@@ -225,7 +269,7 @@ export function ConsumptionPage() {
                   type="button"
                   variant="outline"
                   disabled={!last || consume.isPending}
-                  onClick={() => last && consume.mutate(last.req)}
+                  onClick={() => last && runConsume(last.req)}
                 >
                   Replay last request
                 </Button>
@@ -236,7 +280,7 @@ export function ConsumptionPage() {
                   onClick={() =>
                     last &&
                     parsedUnits &&
-                    consume.mutate({
+                    runConsume({
                       userId,
                       requestedUnits: parsedUnits,
                       requestId: last.req.requestId,
@@ -248,7 +292,7 @@ export function ConsumptionPage() {
               </div>
             </form>
           )}
-          {consume.error && <ErrorState error={consume.error} />}
+          {Boolean(consume.error) && <ErrorState error={consume.error} />}
           {last && !consume.error && (
             <div className="rounded-lg border p-4 space-y-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">

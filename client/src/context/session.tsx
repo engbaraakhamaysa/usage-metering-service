@@ -1,60 +1,75 @@
-import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ApiClient, ApiConfig } from "@/api/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import type { ApiClient } from "@/api/client";
 import { createHttpApi, normalizeBaseUrl, type ManagementApi } from "@/api/http";
 import { createMockApi } from "@/mocks/mockApi";
 
 interface SessionValue {
   api: ApiClient;
   backendApi: ManagementApi;
-  backendScope: readonly [string, string, number];
+  connectionId: number;
+  connectionSignal: AbortSignal;
   baseUrl: string;
-  setBaseUrl: (v: string) => void;
+  setBaseUrl: (value: string) => void;
   apiKey: string | null;
-  setApiKey: (v: string | null) => void;
+  setApiKey: (value: string | null) => void;
+  connectCreatedAccount: (key: string) => void;
+  createdKey: string | null;
+  hideCreatedKey: () => void;
 }
-
 const SessionContext = createContext<SessionValue | null>(null);
 
-/** API key lives only in React memory: never persisted, never logged. */
+/** Credentials exist only in React memory. Every connection has its own abort signal. */
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const qc = useQueryClient();
-  const [baseUrl, updateBaseUrl] = useState("");
-  const [apiKey, updateApiKey] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
-  const resetConnection = () => {
-    void qc.cancelQueries();
-    qc.clear();
-    setRevision((value) => value + 1);
+  const [connection, setConnection] = useState(() => ({
+    baseUrl: "",
+    apiKey: null as string | null,
+    id: 0,
+    controller: new AbortController(),
+  }));
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const hideCreatedKey = useCallback(() => setCreatedKey(null), []);
+  const { baseUrl, apiKey, controller } = connection;
+  const changeConnection = (url: string, key: string | null, reveal = false) => {
+    controller.abort(); // Invalidate pending reads AND writes before rendering the new identity.
+    setCreatedKey(reveal ? key : null);
+    setConnection({
+      baseUrl: url,
+      apiKey: key,
+      id: connection.id + 1,
+      controller: new AbortController(),
+    });
   };
-  const setApiKey = (value: string | null) => {
-    resetConnection();
-    updateApiKey(value);
-  };
-  const setBaseUrl = (value: string) => {
-    const normalized = normalizeBaseUrl(value);
-    if (normalized === baseUrl) return;
-    resetConnection();
-    updateBaseUrl(normalized);
-    // Never carry an existing key to a newly configured backend.
-    updateApiKey(null);
-  };
-  const backendApi = useMemo(() => createHttpApi({ baseUrl, apiKey }), [baseUrl, apiKey]);
-  const backendScope = ["backend", baseUrl, revision] as const;
-  const cfg = useRef<ApiConfig>({ baseUrl, apiKey });
-  cfg.current = { baseUrl, apiKey };
-  const api = useMemo(() => createMockApi(() => cfg.current), []);
+  const backendApi = useMemo(
+    () => createHttpApi({ baseUrl, apiKey }, globalThis.fetch, controller.signal),
+    [baseUrl, apiKey, controller],
+  );
+  // Snapshot mock credentials too: a delayed mock operation must not switch accounts midway.
+  const api = useMemo(() => createMockApi(() => ({ baseUrl, apiKey })), [baseUrl, apiKey]);
   return (
     <SessionContext.Provider
-      value={{ api, backendApi, backendScope, baseUrl, setBaseUrl, apiKey, setApiKey }}
+      value={{
+        api,
+        backendApi,
+        connectionId: connection.id,
+        connectionSignal: controller.signal,
+        baseUrl,
+        apiKey,
+        createdKey,
+        hideCreatedKey,
+        setApiKey: (key) => changeConnection(baseUrl, key),
+        connectCreatedAccount: (key) => changeConnection(baseUrl, key, true),
+        setBaseUrl: (value) => {
+          const url = normalizeBaseUrl(value);
+          if (url !== baseUrl) changeConnection(url, null);
+        },
+      }}
     >
       {children}
     </SessionContext.Provider>
   );
 }
-
 export function useSession() {
-  const v = useContext(SessionContext);
-  if (!v) throw new Error("useSession must be used inside SessionProvider");
-  return v;
+  const session = useContext(SessionContext);
+  if (!session) throw new Error("useSession must be used inside SessionProvider");
+  return session;
 }

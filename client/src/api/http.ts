@@ -70,6 +70,7 @@ export function normalizeBaseUrl(value: string): string {
 export function createHttpApi(
   config: ApiConfig,
   fetcher: typeof fetch = globalThis.fetch,
+  connectionSignal?: AbortSignal,
 ): ManagementApi {
   async function request<T>(
     path: string,
@@ -89,9 +90,12 @@ export function createHttpApi(
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         credentials: "omit",
         redirect: "error",
-        signal: AbortSignal.timeout(15_000),
+        signal: connectionSignal
+          ? AbortSignal.any([connectionSignal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       });
     } catch {
+      if (connectionSignal?.aborted) throw new DOMException("Connection changed", "AbortError");
       // Never echo request headers, keys, URLs, or arbitrary transport exceptions.
       throw new NetworkError(
         "Could not reach the backend. Check the backend URL, proxy, and server availability.",
