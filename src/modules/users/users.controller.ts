@@ -49,14 +49,14 @@ export async function createUserController(
     if (error instanceof Error) {
       if (error.message === "Invalid user plan") {
         res.status(400).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
 
       if (error.message === "User name already exists in this account") {
         res.status(409).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
@@ -65,7 +65,7 @@ export async function createUserController(
     console.error("Failed to create user:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }
@@ -87,7 +87,7 @@ export async function getUsersController(
     console.error("Failed to fetch users:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }
@@ -107,7 +107,7 @@ export async function getUserController(
 
     if (!user) {
       res.status(404).json({
-        message: "User not found",
+        error: "User not found",
       });
       return;
     }
@@ -117,7 +117,7 @@ export async function getUserController(
     console.error("Failed to fetch user:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }
@@ -141,14 +141,14 @@ export async function updateUserPlanController(
     if (error instanceof Error) {
       if (error.message === "User not found") {
         res.status(404).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
 
       if (error.message === "Invalid user plan") {
         res.status(400).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
@@ -157,7 +157,7 @@ export async function updateUserPlanController(
     console.error("Failed to update user plan:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }

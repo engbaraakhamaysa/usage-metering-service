@@ -15,7 +15,7 @@ export function validate<T extends z.ZodType>(
 
     if (!result.success) {
       res.status(400).json({
-        message: "Validation failed",
+        error: "Validation failed",
         errors: result.error.issues,
       });
       return;

@@ -23,7 +23,7 @@ export async function authenticateApiKey(
 
   if (!apiKey) {
     res.status(401).json({
-      message: "API key is required",
+      error: "API key is required",
     });
     return;
   }
@@ -35,7 +35,7 @@ export async function authenticateApiKey(
 
     if (!account) {
       res.status(401).json({
-        message: "Invalid API key",
+        error: "Invalid API key",
       });
       return;
     }
@@ -45,7 +45,7 @@ export async function authenticateApiKey(
     next();
   } catch {
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }

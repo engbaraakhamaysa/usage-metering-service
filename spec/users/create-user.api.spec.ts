@@ -110,7 +110,7 @@ describe("POST /api/users", () => {
         .send(body);
 
       expect(duplicate.status).toBe(409);
-      expect(duplicate.body.message).toBe(
+      expect(duplicate.body.error).toBe(
         "User name already exists in this account",
       );
 
