@@ -91,6 +91,16 @@ export async function createPrivatePlanController(
 
     res.status(201).json(plan);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Plan name already exists for this account and type"
+    ) {
+      res.status(409).json({
+        error: error.message,
+      });
+      return;
+    }
+
     console.error("Failed to create private plan:", error);
 
     res.status(500).json({
@@ -122,6 +132,16 @@ export async function updatePlanController(
 
     res.status(200).json(plan);
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Plan name already exists for this account and type"
+    ) {
+      res.status(409).json({
+        error: error.message,
+      });
+      return;
+    }
+
     console.error("Failed to update plan:", error);
 
     res.status(500).json({

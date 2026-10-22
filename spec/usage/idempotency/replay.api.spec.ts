@@ -7,6 +7,7 @@ import {
   createTestAccount,
   createTestUser,
   deleteTestAccount,
+  getPublicPlan,
 } from "../../helpers/fixtures.js";
 
 ///////////////////////////////////////////////////////
@@ -94,7 +95,7 @@ describe("Usage idempotency replay", () => {
       expect(first.body.rejectionReason).toBe("user_request_limit");
       expect(first.body.duplicate).toBeFalse();
 
-      const premium = await getPremiumPlan();
+      const premium = await getPublicPlan("Premium", "user");
 
       const upgraded = await request(app)
         .patch(`/api/users/${user.id}/plan`)
@@ -152,26 +153,3 @@ describe("Usage idempotency replay", () => {
     }
   });
 });
-
-///////////////////////////////////////////////////////
-// Find the predefined Premium user plan
-///////////////////////////////////////////////////////
-async function getPremiumPlan() {
-  const response = await request(app)
-    .get("/api/plans")
-    .query({ planType: "user" });
-
-  if (response.status !== 200 || !Array.isArray(response.body)) {
-    throw new Error("Failed to fetch public user plans");
-  }
-
-  const plan = response.body.find(
-    (item: { name: string; id: string }) => item.name === "Premium",
-  );
-
-  if (!plan) {
-    throw new Error("Premium user plan not found");
-  }
-
-  return plan;
-}

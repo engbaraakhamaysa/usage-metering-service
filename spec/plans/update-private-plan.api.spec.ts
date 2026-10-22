@@ -71,6 +71,73 @@ describe("PATCH /api/plans/:id", () => {
     }
   });
 
+  it("rejects renaming a plan to an existing name within the same account and type", async () => {
+    const { account, apiKey } = await createTestAccount();
+
+    try {
+      const first = await request(app)
+        .post("/api/plans")
+        .set("x-api-key", apiKey)
+        .send({
+          name: "First User Plan",
+          planType: "user",
+          monthlyAllowance: 100,
+          maxUnitsPerRequest: 10,
+        });
+
+      const second = await request(app)
+        .post("/api/plans")
+        .set("x-api-key", apiKey)
+        .send({
+          name: "Second User Plan",
+          planType: "user",
+          monthlyAllowance: 200,
+          maxUnitsPerRequest: 20,
+        });
+
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+
+      const response = await request(app)
+        .patch(`/api/plans/${second.body.id}`)
+        .set("x-api-key", apiKey)
+        .send({
+          name: "First User Plan",
+          monthlyAllowance: 999,
+        });
+
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe(
+        "Plan name already exists for this account and type",
+      );
+
+      const available = await request(app)
+        .get("/api/plans/me")
+        .set("x-api-key", apiKey);
+
+      expect(available.status).toBe(200);
+
+      expect(available.body).toEqual(
+        jasmine.arrayContaining([
+          jasmine.objectContaining({
+            id: first.body.id,
+            name: "First User Plan",
+            monthlyAllowance: 100,
+            maxUnitsPerRequest: 10,
+          }),
+          jasmine.objectContaining({
+            id: second.body.id,
+            name: "Second User Plan",
+            monthlyAllowance: 200,
+            maxUnitsPerRequest: 20,
+          }),
+        ]),
+      );
+    } finally {
+      await deleteTestAccount(account.id);
+    }
+  });
+
   it("does not modify another account's private plan", async () => {
     const owner = await createTestAccount();
 

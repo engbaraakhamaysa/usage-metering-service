@@ -36,7 +36,7 @@ export async function createAccountController(
   } catch (error) {
     if (error instanceof Error && error.message === "Invalid account plan") {
       res.status(400).json({
-        message: error.message,
+        error: error.message,
       });
       return;
     }
@@ -44,7 +44,7 @@ export async function createAccountController(
     console.error("Failed to create account:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }
@@ -67,14 +67,14 @@ export async function updateAccountPlanController(
     if (error instanceof Error) {
       if (error.message === "Invalid account plan") {
         res.status(400).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
 
       if (error.message === "Account not found") {
         res.status(404).json({
-          message: error.message,
+          error: error.message,
         });
         return;
       }
@@ -83,7 +83,7 @@ export async function updateAccountPlanController(
     console.error("Failed to update account plan:", error);
 
     res.status(500).json({
-      message: "Internal server error",
+      error: "Internal server error",
     });
   }
 }

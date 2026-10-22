@@ -64,6 +64,13 @@
       "when": 1792558555909,
       "tag": "0008_add_usage_integrity_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792646810604,
+      "tag": "0009_add_usage_record_units_check",
+      "breakpoints": true
     }
   ]
 }
