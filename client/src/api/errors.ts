@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { ApiErrorBody } from "@/types";
 
 /** Server responded with a non-2xx status and an { error } body. */
@@ -29,7 +30,16 @@ export function describeError(err: unknown): { title: string; detail: string } {
       404: "Not found (HTTP 404)",
       409: "Conflict (HTTP 409)",
     };
-    return { title: titles[err.status] ?? `HTTP ${err.status}`, detail: err.body.error };
+    const issues = z
+      .array(z.object({ path: z.array(z.union([z.string(), z.number()])), message: z.string() }))
+      .safeParse(err.body.errors);
+    const details = issues.success
+      ? issues.data.map((issue) => `${issue.path.join(".") || "Request"}: ${issue.message}`)
+      : [];
+    return {
+      title: titles[err.status] ?? `Server error (HTTP ${err.status})`,
+      detail: [err.body.error, ...details].join(" · "),
+    };
   }
   if (err instanceof NetworkError) return { title: "Network failure", detail: err.message };
   if (err instanceof Error) return { title: "Unexpected error", detail: err.message };
