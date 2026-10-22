@@ -45,7 +45,7 @@ function ConsumptionContent() {
         setUserId={model.setUserId}
         text={model.text}
         setText={model.setText}
-        wordCount={model.wordCount}
+        characterCount={model.characterCount}
         submitText={model.submitText}
         pending={model.pending}
         attempt={model.attempt}

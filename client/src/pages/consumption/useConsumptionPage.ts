@@ -3,7 +3,7 @@ import { useBackendSession } from "@/api/use-backend-session";
 import type { ConsumptionInput } from "@/context/session";
 import { usePageActive } from "@/hooks/use-page-active";
 import type { User } from "@/types";
-import { countWords, generateUuid, parsePositiveInt } from "@/utils";
+import { countCharacters, generateUuid, parsePositiveInt } from "@/utils";
 import { useEffect, useRef, useState } from "react";
 import { useUsage } from "./useUsage";
 
@@ -24,7 +24,7 @@ export function useConsumptionPage() {
   });
   const [userId, setUserId] = useState(attempt?.request.userId ?? "");
   const [text, setText] = useState("");
-  const wordCount = countWords(text);
+  const characterCount = countCharacters(text);
   const [units, setUnits] = useState("");
   const { month, setMonth, setRefresh, accountUsage, userUsage, maxMonth, monthError } =
     useUsage(userId);
@@ -100,14 +100,15 @@ export function useConsumptionPage() {
       pending ||
       attempt?.uncertain ||
       !userId ||
-      wordCount < 1 ||
-      wordCount > 2_147_483_647
+      !text.trim() ||
+      characterCount < 1 ||
+      characterCount > 2_147_483_647
     )
       return;
     void runConsume({
       mode: "text",
       text,
-      request: { userId, requestedUnits: wordCount, requestId: generateUuid() },
+      request: { userId, requestedUnits: characterCount, requestId: generateUuid() },
     });
   };
 
@@ -115,7 +116,7 @@ export function useConsumptionPage() {
     apiKey,
     text,
     setText,
-    wordCount,
+    characterCount,
     submitText,
     attempt,
     setConsumptionAttempt,

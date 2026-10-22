@@ -13,7 +13,8 @@ it does not synchronize with the source repository or Lovable.
   and Users to the backend, then connected Consumption and Records with safe
   replay and real usage-record pagination. Codex organized the five connected
   pages into local components and hooks, added browser-counted text consumption,
-  and removed the simulated Translation page and mock API.
+  and removed the simulated Translation page and mock API. Codex subsequently
+  changed text consumption to Unicode code-point counting and verified its replay behavior.
 - Codex converted the frontend to a Vite React SPA with React Router and native
   fetch using React state/effects, and verified navigation, cancellation,
   replay behavior, and connected flows against the running local backend.
@@ -145,24 +146,33 @@ are rejected locally, with backend validation errors still displayed if returned
 ### Text consumption
 
 Manual units and **Text consumption** share the existing consumption endpoint and
-real connected users. Text is counted entirely in the browser: trim it, return zero
-if empty, otherwise split on one or more whitespace characters (`/\s+/`). One token
-is one word and one unit. Repeated spaces, tabs, and newlines do not add units;
-punctuation attached to a word does not add words. Arabic and English use the same
-rule. Empty/whitespace-only text cannot be submitted.
+real connected users. Counting uses `Array.from(text).length`: one Unicode code
+point equals one unit, including spaces, tabs, line breaks, and leading/trailing
+whitespace. Empty or whitespace-only text cannot be submitted even when its count
+is positive. The positive integer limit remains 1–2147483647 units.
 
-This is a metered word-count demo convention. It performs no translation or external
-processing. The backend receives only `{ userId, requestId, requestedUnits }`, never
-the text; it validates units and quotas but cannot verify the original text or enforce
-this word-counting rule. Text and its replay snapshot remain in React memory only.
+Arabic and English use the same rule. A simple emoji such as 😀 counts as one;
+combining marks and parts of compound emoji (including joiners and modifiers) can
+count separately. This counts code points, not visually perceived characters or
+UTF-16 code units.
+
+This is a metered character-count demo convention. It performs no translation or
+external processing. The backend receives only `{ userId, requestId, requestedUnits }`,
+never the text; it validates units and quotas but cannot verify the original text or
+enforce this character-counting rule. Text and its replay snapshot remain in React
+memory only.
 
 ### Decisions and replay
 
-Each **Consume** or **Consume text** click creates a new logical request with one UUID and the actual
+`generateUuid()` calls the browser's `crypto.randomUUID()` (a cryptographically random
+version 4 UUID). Each **Consume** or **Consume text** click creates a new logical
+request with a fresh UUID and the actual
 backend payload `{ userId, requestId, requestedUnits }`. A synchronous in-flight
 guard and disabled inputs/buttons prevent simultaneous submissions. A saved
 attempt captures its mode, user, units, UUID, and original text when applicable.
 The request payload is frozen and never changed when either form is edited.
+Replay never recalculates units from the text: attempts saved under an earlier
+counting rule retain their original units and UUID.
 The shared **Last consumption request** card identifies the saved mode and payload,
 and displays the original text snapshot for text attempts. **Retry / replay last request**
 always uses that original snapshot, user, units, and UUID, including after a network error
@@ -250,6 +260,14 @@ switch; these conditions are distinct from actual backend
 outages. Typecheck, lint, build, and `npm audit` passed (zero vulnerabilities).
 Dependencies and the npm lockfile were unchanged, so no new installation was needed.
 No frontend automated test files, runners, or dependencies were added.
+
+For the character-counting update, browser checks verified English and Arabic,
+all whitespace inclusion, empty/whitespace-only submission rejection, a simple emoji,
+a combining mark, and a compound emoji. Live backend checks verified character units,
+new UUIDs for new submissions, accepted/rejected decisions, unchanged counters after
+rejection, and exact replay after editing text, user, and manual units, with no new
+record or increment. No browser runtime errors occurred. Production hosting was not
+verified; no frontend test tooling was restored.
 
 Lint retains seven pre-existing Fast Refresh warnings; the production build
 retains a large-chunk warning. TypeScript strictness is unchanged. Automated

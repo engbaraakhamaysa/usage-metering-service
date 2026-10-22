@@ -18,7 +18,7 @@ type Props = Pick<
   | "setUserId"
   | "text"
   | "setText"
-  | "wordCount"
+  | "characterCount"
   | "submitText"
   | "pending"
   | "attempt"
@@ -30,7 +30,7 @@ export function TextConsumption({
   setUserId,
   text,
   setText,
-  wordCount,
+  characterCount,
   submitText,
   pending,
   attempt,
@@ -40,8 +40,9 @@ export function TextConsumption({
       <CardHeader>
         <CardTitle>Text consumption</CardTitle>
         <CardDescription>
-          Metered word-count demo: one word uses one unit. No translation or external text
-          processing occurs. Only the user ID, request ID, and unit count are sent to the backend.
+          Metered character-count demo: one Unicode code point uses one unit. No translation or
+          external text processing occurs. Only the user ID, request ID, and unit count are sent to
+          the backend.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -80,8 +81,8 @@ export function TextConsumption({
             <Field
               label="Text"
               htmlFor="consumption-text"
-              hint="Enter at least one word. Spaces, tabs, and newlines separate words; attached punctuation does not add words."
-              error={text.length > 0 && wordCount === 0 ? "Enter at least one word" : null}
+              hint="All spaces, tabs, and line breaks count, including leading/trailing whitespace. Combining marks and parts of compound emoji can count separately. Enter non-whitespace text."
+              error={text.length > 0 && !text.trim() ? "Enter non-whitespace text" : null}
             >
               <Textarea
                 id="consumption-text"
@@ -93,14 +94,15 @@ export function TextConsumption({
               />
             </Field>
             <p role="status" className="text-sm text-muted-foreground">
-              Words: {wordCount} · Required units: {wordCount}
+              Characters (Unicode code points): {characterCount} · Required units: {characterCount}
             </p>
             <Button
               type="submit"
               disabled={
                 !userId ||
-                wordCount === 0 ||
-                wordCount > 2_147_483_647 ||
+                !text.trim() ||
+                characterCount === 0 ||
+                characterCount > 2_147_483_647 ||
                 pending ||
                 !!attempt?.uncertain
               }

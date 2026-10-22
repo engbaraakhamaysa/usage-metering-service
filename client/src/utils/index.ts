@@ -14,10 +14,9 @@ export function parsePositiveInt(value: string): number | null {
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
-/** Nonempty whitespace-separated tokens. */
-export function countWords(text: string): number {
-  const trimmed = text.trim();
-  return trimmed ? trimmed.split(/\s+/).length : 0;
+/** Unicode code points, including all whitespace (not grapheme clusters). */
+export function countCharacters(text: string): number {
+  return Array.from(text).length;
 }
 
 export function formatDate(iso: string): string {
