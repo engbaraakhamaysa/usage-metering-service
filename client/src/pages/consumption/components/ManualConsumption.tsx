@@ -1,5 +1,3 @@
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,45 +8,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DecisionBadge,
-  EmptyState,
-  ErrorState,
-  Field,
-  LoadingState,
-  ReasonText,
-} from "@/components/ui/states";
+import { EmptyState, ErrorState, Field, LoadingState } from "@/components/ui/states";
 
 import type { useConsumptionPage } from "../useConsumptionPage";
 type Props = Pick<
   ReturnType<typeof useConsumptionPage>,
   | "attempt"
-  | "setConsumptionAttempt"
   | "users"
   | "userId"
   | "setUserId"
   | "units"
   | "setUnits"
   | "pending"
-  | "mutationError"
-  | "setMutationError"
   | "validUnits"
-  | "runConsume"
   | "submitNew"
 >;
 export function ManualConsumption({
   attempt,
-  setConsumptionAttempt,
   users,
   userId,
   setUserId,
   units,
   setUnits,
   pending,
-  mutationError,
-  setMutationError,
   validUnits,
-  runConsume,
   submitNew,
 }: Props) {
   return (
@@ -112,62 +95,6 @@ export function ManualConsumption({
               </Button>
             </div>
           </form>
-        )}
-        {attempt && (
-          <div className="space-y-3 rounded-lg border p-4 text-sm">
-            <p className="font-mono text-xs break-all">
-              requestId {attempt.request.requestId} · userId {attempt.request.userId} · units{" "}
-              {attempt.request.requestedUnits}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => void runConsume(attempt.request)}
-            >
-              Retry / replay last request
-            </Button>
-            {attempt.uncertain && !pending && (
-              <Alert>
-                <AlertTitle>Consumption result is uncertain</AlertTitle>
-                <AlertDescription>
-                  The request may already have been processed. Retry the saved payload to get its
-                  original decision without double counting. Starting another request may consume
-                  additional units.
-                </AlertDescription>
-                <Button
-                  className="mt-3"
-                  variant="outline"
-                  onClick={() => {
-                    setConsumptionAttempt({ ...attempt, uncertain: false });
-                    setMutationError(null);
-                  }}
-                >
-                  Start a new request anyway
-                </Button>
-              </Alert>
-            )}
-            {attempt.decision && (
-              <section aria-label="Consumption decision" className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">Last confirmed decision (HTTP 200):</span>
-                  <DecisionBadge accepted={attempt.decision.status === "accepted"} />
-                  <Badge variant="outline">
-                    {attempt.decision.duplicate ? "duplicate — no new increment" : "not duplicate"}
-                  </Badge>
-                </div>
-                <div>
-                  rejectionReason: <ReasonText reason={attempt.decision.rejectionReason} />
-                </div>
-                <p className="font-mono text-xs break-all">recordId: {attempt.decision.id}</p>
-              </section>
-            )}
-          </div>
-        )}
-        {Boolean(mutationError) && (
-          <section aria-label="Consumption request error">
-            <ErrorState error={mutationError} />
-          </section>
         )}
       </CardContent>
     </Card>

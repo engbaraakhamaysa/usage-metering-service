@@ -16,7 +16,8 @@ export function parsePositiveInt(value: string): number | null {
 
 /** Nonempty whitespace-separated tokens. */
 export function countWords(text: string): number {
-  return text.split(/\s+/).filter(Boolean).length;
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
 export function formatDate(iso: string): string {

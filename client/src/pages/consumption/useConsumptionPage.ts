@@ -1,8 +1,9 @@
 import { ApiError } from "@/api/errors";
 import { useBackendSession } from "@/api/use-backend-session";
+import type { ConsumptionInput } from "@/context/session";
 import { usePageActive } from "@/hooks/use-page-active";
-import type { ConsumeRequest, User } from "@/types";
-import { generateUuid, parsePositiveInt } from "@/utils";
+import type { User } from "@/types";
+import { countWords, generateUuid, parsePositiveInt } from "@/utils";
 import { useEffect, useRef, useState } from "react";
 import { useUsage } from "./useUsage";
 
@@ -22,6 +23,8 @@ export function useConsumptionPage() {
     error: null,
   });
   const [userId, setUserId] = useState(attempt?.request.userId ?? "");
+  const [text, setText] = useState("");
+  const wordCount = countWords(text);
   const [units, setUnits] = useState("");
   const { month, setMonth, setRefresh, accountUsage, userUsage, maxMonth, monthError } =
     useUsage(userId);
@@ -45,18 +48,20 @@ export function useConsumptionPage() {
       current = false;
     };
   }, [api, apiKey, connectionSignal]);
-  const runConsume = async (input: ConsumeRequest) => {
+  const runConsume = async (input: ConsumptionInput) => {
     if (inFlight.current || connectionSignal.aborted) return;
     inFlight.current = true;
-    const request = { ...input }; // Snapshot: replay never reads the edited form.
+    // Freeze the logical input. Only its three request fields go to the backend.
+    const saved = Object.freeze({ ...input, request: Object.freeze({ ...input.request }) });
+    const { request } = saved;
     const confirmed = attempt?.request.requestId === request.requestId ? attempt.decision : null;
     setPending(true);
     setMutationError(null);
-    setConsumptionAttempt({ request, decision: confirmed, uncertain: true });
+    setConsumptionAttempt({ ...saved, decision: confirmed, uncertain: true });
     try {
       const decision = await api.consume(request);
       if (!active.current || connectionSignal.aborted) return;
-      setConsumptionAttempt({ request, decision, uncertain: false });
+      setConsumptionAttempt({ ...saved, decision, uncertain: false });
       // Counters are read in independent effects; refresh failures never become write errors.
       setMonth("");
       setRefresh((value) => value + 1);
@@ -64,7 +69,7 @@ export function useConsumptionPage() {
       if (!active.current || connectionSignal.aborted) return;
       setMutationError(error);
       setConsumptionAttempt({
-        request,
+        ...saved,
         decision: confirmed,
         uncertain: !(error instanceof ApiError) || error.status >= 500,
       });
@@ -83,11 +88,35 @@ export function useConsumptionPage() {
       parsedUnits === null
     )
       return;
-    void runConsume({ userId, requestedUnits: parsedUnits, requestId: generateUuid() });
+    void runConsume({
+      mode: "manual",
+      request: { userId, requestedUnits: parsedUnits, requestId: generateUuid() },
+    });
+  };
+
+  const submitText = () => {
+    if (
+      inFlight.current ||
+      pending ||
+      attempt?.uncertain ||
+      !userId ||
+      wordCount < 1 ||
+      wordCount > 2_147_483_647
+    )
+      return;
+    void runConsume({
+      mode: "text",
+      text,
+      request: { userId, requestedUnits: wordCount, requestId: generateUuid() },
+    });
   };
 
   return {
     apiKey,
+    text,
+    setText,
+    wordCount,
+    submitText,
     attempt,
     setConsumptionAttempt,
     users,

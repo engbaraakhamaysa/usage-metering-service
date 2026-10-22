@@ -1,4 +1,3 @@
-import type { BackendUsage } from "@/api/http";
 import { ErrorState, LoadingState } from "@/components/ui/states";
 import { formatDate } from "@/utils";
 

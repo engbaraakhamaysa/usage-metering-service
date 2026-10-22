@@ -1,5 +1,7 @@
 import { useBackendSession } from "@/api/use-backend-session";
 import { NeedsApiKey, PageHeader } from "@/components/ui/states";
+import { SavedAttempt } from "./components/SavedAttempt";
+import { TextConsumption } from "./components/TextConsumption";
 
 import { ManualConsumption } from "./components/ManualConsumption";
 import { UsageCard } from "./components/UsageCard";
@@ -37,20 +39,35 @@ function ConsumptionContent() {
         maxMonth={model.maxMonth}
         monthError={model.monthError}
       />
+      <TextConsumption
+        users={model.users}
+        userId={model.userId}
+        setUserId={model.setUserId}
+        text={model.text}
+        setText={model.setText}
+        wordCount={model.wordCount}
+        submitText={model.submitText}
+        pending={model.pending}
+        attempt={model.attempt}
+      />
       <ManualConsumption
         attempt={model.attempt}
-        setConsumptionAttempt={model.setConsumptionAttempt}
         users={model.users}
         userId={model.userId}
         setUserId={model.setUserId}
         units={model.units}
         setUnits={model.setUnits}
         pending={model.pending}
+        validUnits={model.validUnits}
+        submitNew={model.submitNew}
+      />
+      <SavedAttempt
+        attempt={model.attempt}
+        pending={model.pending}
+        runConsume={model.runConsume}
+        setConsumptionAttempt={model.setConsumptionAttempt}
         mutationError={model.mutationError}
         setMutationError={model.setMutationError}
-        validUnits={model.validUnits}
-        runConsume={model.runConsume}
-        submitNew={model.submitNew}
       />
     </div>
   );

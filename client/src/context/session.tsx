@@ -9,11 +9,14 @@ import {
 } from "@/api/http";
 import { createMockApi } from "@/mocks/mockApi";
 
-export interface ConsumptionAttempt {
-  request: ConsumeRequest;
+export type ConsumptionInput =
+  | { readonly mode: "manual"; readonly request: Readonly<ConsumeRequest> }
+  | { readonly mode: "text"; readonly text: string; readonly request: Readonly<ConsumeRequest> };
+
+export type ConsumptionAttempt = ConsumptionInput & {
   decision: ConsumptionDecision | null;
   uncertain: boolean;
-}
+};
 
 interface SessionValue {
   api: ApiClient;
