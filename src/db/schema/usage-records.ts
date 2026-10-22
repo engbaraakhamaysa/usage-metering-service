@@ -72,5 +72,10 @@ export const usageRecords = pgTable(
       table.createdAt.desc(),
       table.id.desc(),
     ),
+
+    check(
+      "usage_records_requested_units_positive",
+      sql`${table.requestedUnits} > 0`,
+    ),
   ],
 );

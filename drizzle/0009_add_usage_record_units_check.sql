@@ -1,0 +1,1 @@
+ALTER TABLE "usage_records" ADD CONSTRAINT "usage_records_requested_units_positive" CHECK ("usage_records"."requested_units" > 0);
