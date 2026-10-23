@@ -334,6 +334,91 @@ Rejection reasons:
 
 HTTP errors use an `error` field. Validation errors also include an `errors` array.
 
+## Main Design Decisions
+
+- **One plans table:** Account and user plans share the same fields, so one table stores both, distinguished by `plan_type`. Composite foreign keys and check constraints enforce the correct plan type for accounts and users.
+
+- **Public and private plans:** A null `owner_account_id` identifies a public plan; otherwise, the plan belongs to an account. Partial unique indexes prevent duplicate plan names within each scope and plan type. Service logic validates private plan ownership before assignment.
+
+- **Account isolation:** Composite foreign keys on `(user_id, account_id)` prevent usage counters and consumption records from referencing a user from another account. API queries are scoped to the authenticated account.
+
+- **Separate counters and records:** `usage` stores monthly totals for quick queries, while `usage_records` stores accepted and rejected decisions for history and replay.
+
+- **Monthly counters:** Usage is stored separately for each UTC calendar month, preserving previous usage. Partial unique indexes allow one shared account counter and one counter per user per month. A null `user_id` identifies the shared account counter.
+
+- **Atomic consumption and concurrency:** A database transaction updates both counters and saves an accepted decision together. An account row lock serializes consumption within that account to prevent quota overruns, while different accounts can be processed concurrently.
+
+- **Account-scoped idempotency:** A unique constraint on `(account_id, request_id)` prevents duplicate records. Processing checks existing requests before updating counters, allowing safe replay while rejecting conflicting input.
+
+- **Data consistency:** Database constraints enforce positive requested units, non-negative usage, and a rejection reason for rejected records only.
+
+- **History indexing:** An index on `(account_id, created_at DESC, id DESC)` supports account-scoped history queries. The record ID provides deterministic ordering when creation timestamps are equal.
+
+### Database Relationships
+
+```mermaid
+erDiagram
+    accounts {
+        uuid id PK
+        varchar name
+        varchar api_key_hash UK
+        uuid plan_id FK
+        plan_type plan_type FK "Always account"
+        timestamptz created_at
+    }
+
+    plans {
+        uuid id PK
+        varchar name
+        plan_type plan_type "account or user"
+        integer monthly_allowance
+        integer max_units_per_request
+        uuid owner_account_id FK "NULL for public plans"
+        timestamptz created_at
+    }
+
+    users {
+        uuid id PK
+        varchar name
+        uuid account_id FK
+        uuid plan_id FK
+        plan_type plan_type FK "Always user"
+        timestamptz created_at
+    }
+
+    usage {
+        uuid id PK
+        uuid account_id FK
+        uuid user_id FK "NULL for shared account counters"
+        date period_start "First day of the UTC month"
+        integer used_units
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    usage_records {
+        uuid id PK
+        uuid account_id FK
+        uuid user_id FK
+        uuid request_id
+        integer requested_units
+        usage_record_status status "accepted or rejected"
+        varchar rejection_reason "NULL when accepted"
+        timestamptz created_at
+    }
+
+    plans ||--o{ accounts : "assigned account plan"
+    plans ||--o{ users : "assigned user plan"
+    accounts o|--o{ plans : "owns private plans"
+    accounts ||--o{ users : contains
+    accounts ||--o{ usage : tracks
+    users o|--o{ usage : "individual counters"
+    accounts ||--o{ usage_records : records
+    users ||--o{ usage_records : generates
+```
+
+The diagram shows all table fields and main relationships. Key constraints are explained in the design decisions above.
+
 ## Testing
 
 Backend tests use Jasmine, Supertest, and a separate PostgreSQL database named `usage_metering_test`.
