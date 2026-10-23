@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+
+.env
+.env.*
+!.env.example
+
+client
+performance/data/fixtures.json
+npm-debug.log*
