@@ -226,7 +226,15 @@ HTTP errors use an `error` field. Validation errors also include an `errors` arr
 
 Backend tests use Jasmine, Supertest, and a separate PostgreSQL database named `usage_metering_test`.
 
-For host development, configure an untracked root `.env`:
+For local development and testing, copy the example configuration:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your local PostgreSQL credentials. Keep `.env` out of version control.
+
+Docker Compose uses the configuration in `compose.yaml` and does not require this file.
 
 ```dotenv
 DATABASE_URL=postgres://USER:PASSWORD@localhost:5432/usage_metering
@@ -273,6 +281,16 @@ See [performance/README.md](performance/README.md) for results, environment deta
 - **Backend tests:** Jasmine and Supertest.
 - **Performance tests:** k6.
 - **Local deployment:** Docker Compose and Nginx.
+
+## Limitations
+
+- API keys and saved replay requests are kept in browser memory and disappear on reload. Reconnect using the saved API key.
+- Navigating away before account creation completes may discard the returned API key. Key recovery and rotation are not implemented.
+- Historical plan-limit snapshots are not stored, so remaining allowances for previous months are returned as `null`.
+- Offset pagination may shift when new records are inserted. Record lists and total counts may reflect different database snapshots.
+- Per-account locking processes consumption requests sequentially within each account, limiting throughput under heavy traffic.
+- Character counting happens in the browser. The backend validates submitted units without receiving or verifying the original text.
+- Docker Compose is configured for local evaluation using demo database credentials and plain HTTP.
 
 ## AI Assistance
 
