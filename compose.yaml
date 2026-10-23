@@ -1,0 +1,58 @@
+name: usage-metering
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: usage_metering
+      POSTGRES_USER: metering
+      POSTGRES_PASSWORD: local_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metering -d usage_metering"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  init:
+    build:
+      context: .
+      target: build
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://metering:local_dev_password@db:5432/usage_metering
+    command:
+      - sh
+      - -c
+      - npm run db:migrate && node dist/src/db/seed.js
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      target: runtime
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgres://metering:local_dev_password@db:5432/usage_metering
+    depends_on:
+      db:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+  client:
+    build:
+      context: ./client
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:

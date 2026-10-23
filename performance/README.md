@@ -1,401 +1,214 @@
-# Performance Test Results
+# Performance Testing
+
+Performance tests measure consumption, request replay, expected rejection, and usage queries. Response checks validate API decisions, while database verification compares stored counters with accepted units.
 
 ## Environment
 
-- Test dates: 2026-10-20 and 2026-10-21
-- Execution: local
-- CPU: Intel Core i7-1065G7, 4 physical cores / 8 logical CPUs
-- Memory: approximately 14 GiB reported by the operating system
-- Node.js: 22.15.0
-- PostgreSQL server: 18.6 (Ubuntu 18.6-0ubuntu0.26.04.1)
-- k6: v2.3.0+dirty, installed through Snap
-- Application: compiled TypeScript, executed with Node.js
-- Database: dedicated `usage_metering_test` database
-- API address: http://localhost:3001
-- Load generator, application, and database ran on the same machine.
+- Test dates: October 20–21, 2026.
+- CPU: Intel Core i7-1065G7, 4 physical cores / 8 logical CPUs.
+- Memory: approximately 14 GiB.
+- Node.js: 22.15.0.
+- PostgreSQL: 18.6.
+- k6: v2.3.0+dirty, installed through Snap.
+- Application: compiled TypeScript running with Node.js.
+- Database: `usage_metering_test`.
+- API: `http://localhost:3001`.
 
-## Test Data
+The application, database, and load generator ran locally on the same machine. These results were not collected through Docker.
 
-Each preparation created ten accounts, each with one user and private
-account and user plans.
+## Test Data and Method
 
-Each plan had:
+Preparation creates ten accounts, each with one user and private account/user plans.
 
-- Monthly allowance: 2,000,000,000 units
-- Maximum units per request: 1,000
+Each plan has:
 
-Accepted consumption requests used one unit and a new UUID request ID.
+- Monthly allowance: 2,000,000,000 units.
+- Maximum units per request: 1,000.
 
-Data accumulated between runs within each test round. Performance data
-from the initial round was cleaned up before preparing the current round.
+Accepted requests consume one unit and use a new UUID.
 
-## Common Method
+Tests use a constant number of virtual users without an intentional delay. Each virtual user waits for its request to complete before sending another.
 
-Tests used a constant number of virtual users, without an intentional
-delay between iterations.
-
-A virtual user waited for its request to finish before starting the next
-iteration. These were concurrency-based tests, not fixed-arrival-rate
-tests.
-
-For single-account scenarios, all virtual users targeted the same account
-and its single user.
-
-For multiple-account scenarios, virtual users were distributed across
-the ten accounts:
-
-- 10 VUs: one VU per account
-- 50 VUs: five VUs per account
-
-A virtual user represents a load-generating execution context, not a
-separate user stored in the database.
-
-Consumption checks verified HTTP status, the expected decision, and
-whether the request was new or a duplicate.
+- **Single account:** all virtual users target the same account and user.
+- **Multiple accounts:** virtual users are distributed across ten accounts.
+- A virtual user is a load-generating execution context, not a separate database user.
 
 `p95` is the response duration at or below which 95% of requests completed.
 
-## Initial Round — 2026-10-20
+## Scenarios
 
-### Method
-
-Each scenario ran once for approximately ten seconds. No dedicated
-warm-up was recorded for this round.
-
-### Results
-
-| Scenario             | VUs | Accounts | HTTP requests | Requests/s |    Average |        p95 | HTTP failures |
-| -------------------- | --: | -------: | ------------: | ---------: | ---------: | ---------: | ------------: |
-| New consumption      |   1 |        1 |         1,166 |     116.54 |    8.36 ms |   11.82 ms |            0% |
-| New consumption      |  10 |        1 |         1,292 |     128.34 |   77.46 ms |   90.84 ms |            0% |
-| New consumption      |  10 |       10 |         3,503 |     349.69 |   28.37 ms |   36.46 ms |            0% |
-| New consumption      |  50 |        1 |         1,277 |     123.65 |  397.72 ms |  447.49 ms |            0% |
-| New consumption      |  50 |       10 |         3,393 |     335.67 |  147.94 ms |  193.79 ms |            0% |
-| Idempotent replay    |  10 |        1 |       2,367\* |   235.40\* | 42.09 ms\* | 52.51 ms\* |            0% |
-| Rejected consumption |  10 |        1 |         1,438 |     142.99 |   69.51 ms |   87.64 ms |            0% |
-| Mixed reads          |  10 |       10 |         9,525 |     950.56 |   10.33 ms |   16.08 ms |            0% |
-
-\*Idempotency HTTP metrics include one initial setup request and 2,366
-replay requests. Replay-only latency was not separately reported.
-
-All application response checks passed in every completed scenario.
-
-The one-VU baseline was recorded from terminal output; its JSON summary
-was not exported.
-
-### Read Endpoint Latency
-
-The mixed-read scenario executed these three requests sequentially in
-each iteration. Its overall request rate combines all three endpoints.
-
-| Endpoint                               |  Average |      p95 |
-| -------------------------------------- | -------: | -------: |
-| GET /api/usage/account                 |  9.01 ms | 14.05 ms |
-| GET /api/usage/users/:userId           | 12.23 ms | 17.85 ms |
-| GET /api/usage/records?page=1&limit=10 |  9.75 ms | 15.11 ms |
-
-The scenario completed 3,175 iterations and 9,525 HTTP requests.
-
-Only the first history page was measured. Deep pagination was not tested.
-
-### Idempotency Verification
-
-The setup request created one accepted record and consumed one unit.
-
-The following 2,366 replay requests:
-
-- Returned the original record ID
-- Returned the original accepted decision
-- Returned `duplicate: true`
-- Did not increase usage or create additional records
-
-### Rejection Verification
-
-The rejected scenario submitted 1,001 units per request, exceeding the
-account's per-request limit of 1,000.
-
-All 1,438 requests:
-
-- Returned HTTP 200 with `status: "rejected"`
-- Returned `rejectionReason: "account_request_limit"`
-- Created a new rejection record
-- Did not increase account or user counters
+| Script                         | Purpose                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `consume-single-account.js`    | New consumption requests targeting one account            |
+| `consume-multiple-accounts.js` | New consumption requests distributed across accounts      |
+| `idempotency.js`               | Repeated requests using the same request ID               |
+| `rejected.js`                  | Requests exceeding the account per-request limit          |
+| `reads.js`                     | Account usage, user usage, and first-page history queries |
 
 A quota rejection is an expected business decision, not an HTTP failure.
 
-### Database Verification
+## Initial Results — October 20
 
-After the accepted consumption scenarios and idempotency setup:
+Each scenario ran once for approximately ten seconds. No dedicated warm-up was recorded.
 
-- Accepted records: 10,632
-- Accepted units: 10,632
-- Sum of account counters: 10,632
-- Sum of user counters: 10,632
+| Scenario             | VUs | Accounts | HTTP requests | Requests/s |    Average |        p95 |
+| -------------------- | --: | -------: | ------------: | ---------: | ---------: | ---------: |
+| New consumption      |   1 |        1 |         1,166 |     116.54 |    8.36 ms |   11.82 ms |
+| New consumption      |  10 |        1 |         1,292 |     128.34 |   77.46 ms |   90.84 ms |
+| New consumption      |  10 |       10 |         3,503 |     349.69 |   28.37 ms |   36.46 ms |
+| New consumption      |  50 |        1 |         1,277 |     123.65 |  397.72 ms |  447.49 ms |
+| New consumption      |  50 |       10 |         3,393 |     335.67 |  147.94 ms |  193.79 ms |
+| Idempotent replay    |  10 |        1 |       2,367\* |   235.40\* | 42.09 ms\* | 52.51 ms\* |
+| Rejected consumption |  10 |        1 |         1,438 |     142.99 |   69.51 ms |   87.64 ms |
+| Mixed reads          |  10 |       10 |         9,525 |     950.56 |   10.33 ms |   16.08 ms |
 
-After the rejected scenario:
+All response checks passed, with zero HTTP failures.
 
-- Total records: 12,070
-- Accepted records: 10,632
-- Rejected records: 1,438
-- Accepted units and counters remained at 10,632
+\*Idempotency metrics include one initial setup request and 2,366 replay requests. Replay-only latency was not measured separately.
 
-The read scenario left all totals unchanged.
+The one-VU baseline was retained from terminal output; no JSON summary was exported.
 
-### Findings
+### Read Latency
 
-- Distributing requests across ten accounts produced approximately
-  2.7 times the throughput of targeting one account at the same VU count.
-- Increasing concurrency from 10 to 50 VUs increased latency without
-  improving throughput in these runs.
-- This behavior is consistent with per-account serialization during
-  consumption. Database lock waits were not directly measured.
-- Idempotent replays avoided additional consumption and record creation.
-- Rejected requests preserved counters while recording rejection history.
-- Read requests completed without changing stored usage data.
+The mixed-read scenario performs three requests sequentially per iteration.
 
-These findings describe the measured local scenarios and do not establish
-maximum production capacity.
+| Endpoint                                 |  Average |      p95 |
+| ---------------------------------------- | -------: | -------: |
+| `GET /api/usage/account`                 |  9.01 ms | 14.05 ms |
+| `GET /api/usage/users/:userId`           | 12.23 ms | 17.85 ms |
+| `GET /api/usage/records?page=1&limit=10` |  9.75 ms | 15.11 ms |
 
-## Current Version Round — 2026-10-21
+The combined request rate is not the throughput of a single endpoint. Deep pagination was not measured.
 
-### Implementation Context
+### Correctness Verification
 
-The current implementation reads the account and user usage counters
-in one query instead of two separate queries.
+Idempotent replay returned the original record and decision with `duplicate: true`, without additional usage or records.
 
-Other backend changes were also made after the initial performance
-round, including usage reporting and coordination of plan updates with
-consumption.
+Rejected requests submitted 1,001 units against an account per-request limit of 1,000. All returned `account_request_limit`, created rejection records, and left counters unchanged.
 
-The two rounds therefore do not isolate the performance effect of
-combining the counter queries. No causal speedup is claimed.
+After accepted traffic and idempotency setup:
 
-### Preliminary Measurements
+- Accepted records and units: **10,632**.
+- Sum of account counters: **10,632**.
+- Sum of user counters: **10,632**.
 
-Before the repeated 60-second runs, two ten-second runs were performed
-against one account with 10 VUs.
+After rejected traffic:
 
-| Run | Requests | Requests/s |  Average |       p95 | HTTP failures |
-| --: | -------: | ---------: | -------: | --------: | ------------: |
-|   1 |    1,237 |     122.89 | 80.85 ms | 106.71 ms |            0% |
-|   2 |    1,367 |     135.67 | 72.90 ms |  85.40 ms |            0% |
+- Total records: **12,070**.
+- Rejected records: **1,438**.
+- Accepted units and both counter totals remained **10,632**.
 
-All response checks and database verification passed.
+Read requests left these totals unchanged.
 
-These preliminary measurements are kept separate from the repeated
-60-second measurements below.
+## Repeated Results — October 21
 
-### Repeated-Run Method
+Each configuration ran three times for 60 seconds. Warm-up traffic preceded the repeated measurements, but no separate warm-up was recorded before every configuration.
 
-Four consumption configurations were measured:
+The application remained running, data accumulated, and configuration order was not randomized.
 
-- One account with 10 VUs
-- Ten accounts with 10 VUs
-- One account with 50 VUs
-- Ten accounts with 50 VUs
+| Accounts | VUs | Run | Requests | Requests/s |   Average |       p95 |
+| -------- | --: | --: | -------: | ---------: | --------: | --------: |
+| 1        |  10 |   1 |    8,632 |     143.72 |  69.32 ms |  81.67 ms |
+| 1        |  10 |   2 |    8,459 |     140.83 |  70.74 ms |  84.15 ms |
+| 1        |  10 |   3 |    8,662 |     144.22 |  69.07 ms |  81.53 ms |
+| 10       |  10 |   1 |   25,281 |     421.21 |  23.54 ms |  28.93 ms |
+| 10       |  10 |   2 |   25,203 |     419.96 |  23.62 ms |  28.94 ms |
+| 10       |  10 |   3 |   25,086 |     417.97 |  23.73 ms |  29.17 ms |
+| 1        |  50 |   1 |    8,430 |     139.68 | 356.71 ms | 394.89 ms |
+| 1        |  50 |   2 |    8,071 |     133.82 | 372.44 ms | 417.02 ms |
+| 1        |  50 |   3 |    7,573 |     125.46 | 397.05 ms | 446.54 ms |
+| 10       |  50 |   1 |   24,702 |     411.01 | 121.36 ms | 132.09 ms |
+| 10       |  50 |   2 |   24,533 |     408.25 | 122.19 ms | 135.94 ms |
+| 10       |  50 |   3 |   24,787 |     412.44 | 120.95 ms | 130.64 ms |
 
-Each configuration had three completed runs of 60 seconds.
+All completed runs passed response checks and database verification, with zero HTTP failures and no interrupted iterations.
 
-Warm-up traffic preceded the repeated measurements. No separate warm-up
-was recorded before every configuration.
+The JSON summary for ten accounts, 10 VUs, run 2 was overwritten by an interrupted rerun. Its completed-run metrics were retained from terminal output. The interrupted rerun is excluded from the table.
 
-The application remained running between measurements, and data
-accumulated throughout the round. Configurations were run sequentially;
-their order was not randomized.
+Two preliminary ten-second runs with one account and 10 VUs measured:
 
-### Results
+| Run | Requests | Requests/s |  Average |       p95 |
+| --- | -------: | ---------: | -------: | --------: |
+| 1   |    1,237 |     122.89 | 80.85 ms | 106.71 ms |
+| 2   |    1,367 |     135.67 | 72.90 ms |  85.40 ms |
 
-| Accounts | VUs | Run | HTTP requests | Requests/s |   Average |       p95 | HTTP failures |
-| -------: | --: | --: | ------------: | ---------: | --------: | --------: | ------------: |
-|        1 |  10 |   1 |         8,632 |     143.72 |  69.32 ms |  81.67 ms |            0% |
-|        1 |  10 |   2 |         8,459 |     140.83 |  70.74 ms |  84.15 ms |            0% |
-|        1 |  10 |   3 |         8,662 |     144.22 |  69.07 ms |  81.53 ms |            0% |
-|       10 |  10 |   1 |        25,281 |     421.21 |  23.54 ms |  28.93 ms |            0% |
-|       10 |  10 |   2 |        25,203 |     419.96 |  23.62 ms |  28.94 ms |            0% |
-|       10 |  10 |   3 |        25,086 |     417.97 |  23.73 ms |  29.17 ms |            0% |
-|        1 |  50 |   1 |         8,430 |     139.68 | 356.71 ms | 394.89 ms |            0% |
-|        1 |  50 |   2 |         8,071 |     133.82 | 372.44 ms | 417.02 ms |            0% |
-|        1 |  50 |   3 |         7,573 |     125.46 | 397.05 ms | 446.54 ms |            0% |
-|       10 |  50 |   1 |        24,702 |     411.01 | 121.36 ms | 132.09 ms |            0% |
-|       10 |  50 |   2 |        24,533 |     408.25 | 122.19 ms | 135.94 ms |            0% |
-|       10 |  50 |   3 |        24,787 |     412.44 | 120.95 ms | 130.64 ms |            0% |
+Both passed response checks and database verification.
 
-All completed runs passed all response checks and had no interrupted
-iterations. Database verification passed after every completed run.
-
-The JSON summary for the completed ten-account, 10-VU run 2 was
-accidentally overwritten by an interrupted rerun. Its completed-run
-metrics above were retained from terminal output. The interrupted
-rerun is excluded from the results table.
-
-### Observed Ranges Across Three Runs
-
-| Accounts | VUs | Requests/s range | Average latency range | Per-run p95 range |
-| -------: | --: | ---------------: | --------------------: | ----------------: |
-|        1 |  10 |    140.83–144.22 |        69.07–70.74 ms |    81.53–84.15 ms |
-|       10 |  10 |    417.97–421.21 |        23.54–23.73 ms |    28.93–29.17 ms |
-|        1 |  50 |    125.46–139.68 |      356.71–397.05 ms |  394.89–446.54 ms |
-|       10 |  50 |    408.25–412.44 |      120.95–122.19 ms |  130.64–135.94 ms |
-
-These are ranges of individual-run metrics, not confidence intervals
-or percentiles calculated from pooled requests.
-
-### Database Verification
-
-Final cumulative totals were:
-
-- Sum of account counters: 207,001 units
-- Sum of user counters: 207,001 units
-- Accepted units: 207,001
-- Accepted records: 207,001
-- Total records: 207,001
-
-These totals include preliminary runs, warm-up traffic, and requests
-processed during the interrupted rerun. They are not the sum of only
-the twelve completed runs in the results table.
+Final cumulative accepted units, accepted records, account counters, and user counters all equalled **207,001**. This includes preliminary runs, warm-up, and traffic processed during the interrupted rerun—not only the twelve completed measurements.
 
 ### Findings
 
-- At 10 VUs, one account sustained 140.83–144.22 requests/s.
-- At 10 VUs, ten accounts sustained 417.97–421.21 requests/s.
-- Distributing load across ten accounts produced approximately three
-  times the single-account throughput in this round.
-- Increasing concurrency to 50 VUs increased response latency without
-  increasing throughput in the measured configurations.
-- Single-account throughput declined across the three 50-VU runs.
-  Resource utilization and database waits were not measured, so the
-  cause was not established.
-- The results are consistent with contention on the shared account
-  lock, but lock waits were not directly measured.
-- All completed consumption requests were accepted, and stored counters
-  matched accepted units.
+- At 10 VUs, ten accounts achieved approximately three times the throughput of one account.
+- Increasing concurrency to 50 VUs increased latency without improving throughput.
+- This is consistent with per-account serialization, but database lock waits were not directly measured.
+- Multiple backend changes occurred between rounds, so the results do not isolate the effect of any single code change.
+- Read, rejection, and idempotency scenarios were not repeated in this round.
 
-Idempotency, rejection, and read performance scenarios were measured in
-the initial round. They were not repeated in the current round.
+## History Index Evaluation
 
-## History Index Evaluation — 2026-10-21
-
-### Change
-
-Added a B-tree index on:
+A B-tree index supports:
 
 ```sql
 (account_id, created_at DESC NULLS LAST, id DESC NULLS LAST)
 ```
 
-The history query was updated to use the same explicit ordering:
+The query uses matching ordering:
 
 ```sql
 ORDER BY created_at DESC NULLS LAST, id DESC NULLS LAST
 ```
 
-Both ordering columns are NOT NULL, so this preserves the returned order.
+The table contained 81,931 records, with 15,602 belonging to the selected account. The query retrieved the newest ten records with OFFSET 0.
 
-### History Query Measurement
+Measurements used `EXPLAIN (ANALYZE, BUFFERS)` without adding records between query measurements.
 
-The table contained 81,931 records, including 15,602 records belonging
-to the selected account. No records were added between these query
-measurements.
+| Configuration                | Execution time | Query plan                       |
+| ---------------------------- | -------------: | -------------------------------- |
+| Before index, measurement 1  |       5.027 ms | Sequential scan and top-N sort   |
+| Before index, measurement 2  |       7.292 ms | Sequential scan and top-N sort   |
+| Index with original ordering |       5.803 ms | Bitmap heap scan and top-N sort  |
+| Index with matching ordering |       0.039 ms | Index scan without separate sort |
 
-The query selected the account's newest ten records with OFFSET 0.
-Measurements used EXPLAIN (ANALYZE, BUFFERS).
+Matching the query's NULL ordering to the index allowed a direct ordered index scan.
 
-| Configuration                | Execution time | Plan                               | Shared buffer hits | Shared buffer reads |
-| ---------------------------- | -------------: | ---------------------------------- | -----------------: | ------------------: |
-| Before index, measurement 1  |       5.027 ms | Sequential scan and top-N sort     |              1,099 |                   0 |
-| Before index, measurement 2  |       7.292 ms | Sequential scan and top-N sort     |              1,105 |                   0 |
-| Index with original ordering |       5.803 ms | Bitmap heap scan and top-N sort    |                958 |                 114 |
-| Index with matching ordering |       0.039 ms | Index scan without a separate sort |                  4 |                   0 |
+The **0.039 ms** result is one SQL execution measurement. It excludes planning, the separate COUNT query, and HTTP processing. It is not an average or proof of an equivalent API latency improvement.
 
-The original query used DESC, whose default NULL ordering differed
-from the generated index definition. Explicit NULLS LAST allowed the
-measured query to use the index directly for ordering.
+### Consumption Before and After the Index
 
-The matching index scan returned ten rows without scanning and sorting
-all matching account records.
+Each run used ten accounts, ten VUs, and a 60-second duration.
 
-These are database execution times, excluding planning time and HTTP
-processing. The 0.039 ms result is a single measurement, not an average
-or a demonstrated API latency improvement.
+| Index state | Run | Requests | Requests/s |  Average |      p95 |
+| ----------- | --: | -------: | ---------: | -------: | -------: |
+| Before      |   1 |   23,426 |     390.36 | 25.41 ms | 33.55 ms |
+| Before      |   2 |   25,539 |     425.50 | 23.31 ms | 29.64 ms |
+| Before      |   3 |   24,746 |     412.30 | 24.06 ms | 30.41 ms |
+| After       |   1 |   23,781 |     396.25 | 25.03 ms | 31.71 ms |
+| After       |   2 |   26,241 |     437.23 | 22.69 ms | 27.23 ms |
+| After       |   3 |   26,449 |     440.04 | 22.54 ms | 26.59 ms |
 
-The history endpoint also performs a separate COUNT query. Its cost
-was not included in this query measurement. Deep pagination was not
-measured.
+All checks and database verification passed, with zero HTTP failures.
 
-### Consumption Performance Before and After the Index
+Final accepted units, account usage, user usage, and record count all equalled **158,402**, including 8,220 records generated before these six runs.
 
-Each run used ten accounts, one user per account, and ten virtual users
-for 60 seconds.
+No clear consumption slowdown was observed. This does not establish that index maintenance is free or that the index caused higher throughput. The dataset grew, the server was restarted before the after-index runs, and cache/resource conditions were not controlled.
 
-| Index state | Run | HTTP requests | Requests/s |  Average |      p95 |
-| ----------- | --: | ------------: | ---------: | -------: | -------: |
-| Before      |   1 |        23,426 |     390.36 | 25.41 ms | 33.55 ms |
-| Before      |   2 |        25,539 |     425.50 | 23.31 ms | 29.64 ms |
-| Before      |   3 |        24,746 |     412.30 | 24.06 ms | 30.41 ms |
-| After       |   1 |        23,781 |     396.25 | 25.03 ms | 31.71 ms |
-| After       |   2 |        26,241 |     437.23 | 22.69 ms | 27.23 ms |
-| After       |   3 |        26,449 |     440.04 | 22.54 ms | 26.59 ms |
+The index was retained for its demonstrated first-page history query benefit.
 
-All six runs passed all response checks, had zero HTTP failures,
-and completed without interrupted iterations.
+## Reproduce the Tests
 
-Database verification passed after every run. Final cumulative totals
-for this preparation were:
+### Requirements
 
-- Account usage: 158,402 units
-- User usage: 158,402 units
-- Accepted units: 158,402
-- Accepted records: 158,402
-- Total records: 158,402
+- Node.js 22.15.0 and installed project dependencies.
+- PostgreSQL database named `usage_metering_test`.
+- `TEST_DATABASE_URL` configured in the root `.env`.
+- k6 installed separately.
 
-These totals include 8,220 records generated before the six consumption
-runs.
+Run commands from the repository root. Do not run backend tests or other traffic against the test database during measurements.
 
-### Interpretation and Limitations
-
-The index and matching query ordering substantially reduced the work
-required for the measured first-page history query.
-
-No clear consumption slowdown was observed in these runs. This does
-not mean index maintenance has zero write cost, or that the index
-caused the higher consumption throughput observed afterward.
-
-The table grew during consumption measurements: before-index runs
-ended at 81,931 records, and after-index runs ended at 158,402 records.
-The server was restarted before after-index measurements. Run order,
-cache state, and local resource conditions were not controlled.
-
-The index was retained because it supports the history access pattern
-and showed a clear query-plan benefit without an observed consumption
-regression in this evaluation.
-
-## Verification Scope
-
-`npm run perf:verify` checks that each performance account's usage counter
-and its single user's counter match the accepted units stored for that
-account.
-
-The verification compares cumulative units across stored periods.
-It does not independently verify the assignment of every record to a
-monthly period.
-
-Response checks and database verification provide complementary checks:
-response checks validate the observed API outcomes, while database
-verification checks stored usage consistency.
-
-## Reproduction
-
-### Prerequisites
-
-- Node.js and project dependencies
-- PostgreSQL test database
-- `TEST_DATABASE_URL` configured
-- k6 installed separately
-- No other tests or clients sending requests during measurements
-
-Apply migrations and prepare data:
+### 1. Prepare
 
 ```bash
+npm ci
 NODE_ENV=test npm run db:migrate
 npm run db:seed:test
 npm run perf:prepare
@@ -403,174 +216,107 @@ npm run build
 mkdir -p performance/results
 ```
 
-The preparation script refuses to overwrite an existing fixtures file.
-Clean up a previous performance run before preparing a new one.
+Preparation refuses to overwrite an existing fixtures file. Clean up a previous preparation before creating another.
 
-Start the application in a separate terminal:
+### 2. Start the Performance Server
+
+In a separate terminal:
 
 ```bash
 NODE_ENV=test PORT=3001 npm start
 ```
 
-Restart the application after rebuilding if the source code changes.
+Restart this process after rebuilding if the code changes.
 
-### Warm-Up
-
-Run warm-up traffic before collecting measurements:
+### 3. Warm Up
 
 ```bash
 k6 run --vus 10 --duration 15s \
   performance/scripts/consume-single-account.js
 ```
 
-Warm-up traffic is excluded from reported measurement tables but remains
-in the cumulative database totals.
+Warm-up traffic is excluded from measurement tables but remains in database totals.
 
-### Repeated Consumption Measurements
+### 4. Run a Scenario
 
-The following command runs each configuration three times for 60 seconds
-and verifies stored data after each completed run.
+One account:
 
-Use a unique `measurement_id` for each measurement session to avoid
-overwriting earlier summary files.
+```bash
+k6 run --vus 10 --duration 60s \
+  performance/scripts/consume-single-account.js
+```
+
+Ten accounts:
+
+```bash
+k6 run --vus 10 --duration 60s \
+  performance/scripts/consume-multiple-accounts.js
+```
+
+Change `--vus` to `50` to reproduce the higher-concurrency configuration.
+
+Other scenarios:
+
+```bash
+k6 run performance/scripts/idempotency.js
+k6 run performance/scripts/rejected.js
+k6 run performance/scripts/reads.js
+```
+
+Run scenarios sequentially, not concurrently.
+
+### 5. Save Results
+
+Use a unique filename to avoid overwriting previous evidence:
 
 ```bash
 measurement_id=$(date -u +%Y%m%dT%H%M%SZ)
 
-for vus in 10 50; do
-  for scenario in single-account multiple-accounts; do
-    for run in 1 2 3; do
-      k6 run --vus "$vus" --duration 60s \
-        --summary-export="performance/results/${measurement_id}-${scenario}-${vus}vus-run${run}.json" \
-        "performance/scripts/consume-${scenario}.js" || break 3
-
-      npm run perf:verify || break 3
-    done
-  done
-done
-```
-
-Do not run these scenarios concurrently.
-
-The recorded current-round files use the prefix `current-`. The command
-above adds a session timestamp to prevent accidental overwrites.
-
-### Initial-Round Scenario Commands
-
-The commands below reproduce the initial workload configurations against
-the checked-out application version. Running them against a newer version
-does not reproduce the original implementation.
-
-Use a unique output filename for each new execution.
-
-#### One Account, One VU
-
-```bash
-k6 run --vus 1 --duration 10s \
-  performance/scripts/consume-single-account.js
-```
-
-#### One Account, 10 VUs
-
-```bash
-k6 run --vus 10 --duration 10s \
-  --summary-export=performance/results/single-account-10vus.json \
-  performance/scripts/consume-single-account.js
-```
-
-#### Ten Accounts, 10 VUs
-
-```bash
-k6 run --vus 10 --duration 10s \
-  --summary-export=performance/results/multiple-accounts-10vus.json \
+k6 run --vus 10 --duration 60s \
+  --summary-export="performance/results/${measurement_id}-multiple-accounts-10vus.json" \
   performance/scripts/consume-multiple-accounts.js
 ```
 
-#### One Account, 50 VUs
+For repeated measurements, run each configuration three times and use a different output filename for each run.
 
-```bash
-k6 run --vus 50 --duration 10s \
-  --summary-export=performance/results/single-account-50vus.json \
-  performance/scripts/consume-single-account.js
-```
+### 6. Verify Stored Data
 
-#### Ten Accounts, 50 VUs
-
-```bash
-k6 run --vus 50 --duration 10s \
-  --summary-export=performance/results/multiple-accounts-50vus.json \
-  performance/scripts/consume-multiple-accounts.js
-```
-
-#### Idempotent Replay
-
-```bash
-k6 run \
-  --summary-export=performance/results/idempotency-10vus.json \
-  performance/scripts/idempotency.js
-```
-
-#### Rejected Consumption
-
-```bash
-k6 run \
-  --summary-export=performance/results/rejected-10vus.json \
-  performance/scripts/rejected.js
-```
-
-#### Mixed Reads
-
-```bash
-k6 run \
-  --summary-export=performance/results/reads-10vus.json \
-  performance/scripts/reads.js
-```
-
-### Verify Stored Data
-
-After each scenario finishes, while no other requests are being sent:
+After each scenario, while no other traffic is running:
 
 ```bash
 npm run perf:verify
 ```
 
-Exact request counts may differ between runs. Compare counter changes
-with the accepted units generated by each run.
+Verification compares each performance account's counter and its single user's counter with accepted units in its records.
 
-`performance/data/fixtures.json` contains test API keys and must remain
-excluded from version control.
+It checks cumulative totals across stored periods. It does not independently verify the month assignment of every record.
 
-## Limitations
+The accepted-consumption scripts report checks without correctness thresholds. Review the check results and HTTP failure rate manually; a successful process exit alone does not prove that every check passed.
 
-- Measurements were local, with the load generator, application, and
-  PostgreSQL competing for the same machine's resources.
-- Initial-round scenarios were single ten-second runs.
-- Current-round consumption scenarios had three 60-second runs each;
-  this is not a long-duration stability test.
-- Data volume increased between scenarios and repeated runs.
-- Scenario order was not randomized.
-- CPU usage, memory usage during testing, connection-pool waits, and
-  database lock waits were not measured.
-- The rounds used different application versions and workload durations.
-  They do not isolate the performance effect of the query change.
-- VU-based tests reduce their request rate when responses slow down;
-  fixed-arrival-rate overload behavior was not tested.
-- History performance was measured only for the first page with a limit
-  of ten records in the initial round.
-- Read, rejection, and idempotency performance was not remeasured after
-  the subsequent backend changes.
-- Results do not establish maximum production capacity or a production
-  latency SLA.
-- Database failures and concurrent plan updates were not exercised in
-  these performance measurements.
+### 7. Clean Up
 
-## Cleanup
-
-Stop the performance server, then remove the generated test data:
+Stop the performance server, then run:
 
 ```bash
 npm run perf:cleanup
 ```
 
-This removes the performance accounts and their related data, then deletes
-the fixtures file. Public plans and saved performance results are preserved.
+This removes the generated performance accounts and related data, then deletes the fixtures file. Public plans and saved result files are preserved.
+
+`performance/data/fixtures.json` contains test API keys and must remain excluded from version control. Use the cleanup script rather than deleting this file manually.
+
+## Limitations
+
+- All components competed for resources on one local machine.
+- Initial measurements were single ten-second runs; repeated consumption measurements were three 60-second runs per configuration.
+- These are not long-duration stability or fixed-arrival-rate overload tests.
+- Dataset size increased during testing, and scenario order was not randomized.
+- CPU, memory, connection-pool waits, and database lock waits were not measured.
+- Deep history pagination was not benchmarked.
+- Database failures and concurrent plan changes were not exercised by these load scenarios.
+- Results do not establish maximum production capacity or a production latency SLA.
+
+## Related Documentation
+
+- [Main README](../README.md)
+- [Frontend](../client/README.md)

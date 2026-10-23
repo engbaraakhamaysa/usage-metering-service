@@ -1,0 +1,7 @@
+node_modules/
+dist/
+client/
+drizzle/
+performance/data/
+performance/results/
+package-lock.json
