@@ -37,9 +37,12 @@ Startup automatically:
 3. Seeds missing predefined plans.
 4. Starts the backend and frontend.
 
-Open:
+### Application URLs
 
-http://localhost:8080
+- **Frontend:** http://localhost:8080
+- **API example:** http://localhost:8080/api/plans
+
+Nginx forwards `/api` requests to the backend, which runs inside Docker at `http://backend:3000`.
 
 Leave **API Base URL** blank to use the included API proxy.
 
@@ -133,7 +136,45 @@ An account may own multiple plans but has one assigned account plan at a time. U
 - Reusing it with a different user or unit count returns HTTP 409.
 - Request IDs are unique within an account.
 
-Consumption runs inside a database transaction. An account row lock serializes competing consumption requests for that account, and both counters and the decision record are committed together.
+Consumption runs inside a database transaction. An account row lock serializes competing consumption requests for that account. Accepted requests update both counters and save the decision together. Rejected requests save the decision without increasing either counter.
+
+### Consumption Request Flow
+
+```mermaid
+sequenceDiagram
+participant C as Client
+participant A as Backend API
+participant D as PostgreSQL
+
+    C->>A: Submit consumption request
+    A->>A: Authenticate and validate input
+    A->>D: Begin transaction
+    A->>D: Lock account row
+    A->>D: Find account request ID
+
+    alt Existing request
+        alt Same user and units
+            A->>D: End transaction without changes
+            A-->>C: Original decision, duplicate true
+        else Different user or units
+            A->>D: End transaction without changes
+            A-->>C: HTTP 409 conflict
+        end
+    else New request
+        A->>A: Determine current UTC month
+        A->>D: Read user, plans, and usage
+        A->>A: Check account and user limits
+        alt Within all limits
+            A->>D: Update both counters
+            A->>D: Save accepted record
+        else Limit exceeded
+            A->>D: Save rejected record
+            Note over A,D: Counters remain unchanged
+        end
+        A->>D: Commit transaction
+        A-->>C: HTTP 200 decision, duplicate false
+    end
+```
 
 ## Product Assumptions and Decisions
 
@@ -191,6 +232,118 @@ Plan lists accept an optional `planType=account` or `planType=user` filter. Usag
 
 History accepts `page` and `limit`, defaulting to 1 and 10. The maximum limit is 100.
 
+### API Request Examples
+
+Use `http://localhost:8080` as the base URL when running with Docker Compose.
+
+Send JSON bodies with `Content-Type: application/json`. Protected endpoints also require `x-api-key: YOUR_API_KEY`.
+
+#### Create an Account
+
+First, get available public account plans:
+
+```http
+GET /api/plans?planType=account
+```
+
+Use a returned plan ID to create an account. No API key is required:
+
+```http
+POST /api/accounts
+```
+
+```json
+{
+  "name": "Foothill",
+  "planId": "PUBLIC_ACCOUNT_PLAN_UUID"
+}
+```
+
+The response includes the account details and an `apiKey`. Save this key immediately; it cannot be retrieved later. Only its hash is stored in the database.
+
+#### Create a User
+
+Get available public and owned user plans using your API key:
+
+```http
+GET /api/plans/me?planType=user
+```
+
+Then create a user:
+
+```http
+POST /api/users
+```
+
+```json
+{
+  "name": "baraa",
+  "planId": "USER_PLAN_UUID"
+}
+```
+
+The user belongs to the account identified by the API key.
+
+#### Create a Private Plan
+
+```http
+POST /api/plans
+```
+
+```json
+{
+  "name": "Foothill Custom",
+  "planType": "account",
+  "monthlyAllowance": 5000,
+  "maxUnitsPerRequest": 200
+}
+```
+
+The plan belongs to the authenticated account. Use `"planType": "user"` to create a user plan.
+
+#### Update a Private Plan
+
+```http
+PATCH /api/plans/PRIVATE_PLAN_UUID
+```
+
+```json
+{
+  "monthlyAllowance": 8000,
+  "maxUnitsPerRequest": 300
+}
+```
+
+Only the owning account can update a private plan. Public plans cannot be edited.
+
+#### Change an Assigned Plan
+
+Change the authenticated account's plan:
+
+```http
+PATCH /api/accounts/me/plan
+```
+
+```json
+{
+  "planId": "ACCOUNT_PLAN_UUID"
+}
+```
+
+Change a user's plan:
+
+```http
+PATCH /api/users/USER_UUID/plan
+```
+
+```json
+{
+  "planId": "USER_PLAN_UUID"
+}
+```
+
+Plans must have the correct type and be public or owned by the authenticated account. Changing a plan preserves existing usage and history.
+
 ### Consumption Request
 
 Replace the placeholders with valid UUIDs:
@@ -222,11 +375,104 @@ Rejection reasons:
 
 HTTP errors use an `error` field. Validation errors also include an `errors` array.
 
+## Main Design Decisions
+
+- **One plans table:** Account and user plans share the same fields, so one table stores both, distinguished by `plan_type`. Composite foreign keys and check constraints enforce the correct plan type for accounts and users.
+
+- **Public and private plans:** A null `owner_account_id` identifies a public plan; otherwise, the plan belongs to an account. Partial unique indexes prevent duplicate plan names within each scope and plan type. Service logic validates private plan ownership before assignment.
+
+- **Account isolation:** Composite foreign keys on `(user_id, account_id)` prevent usage counters and consumption records from referencing a user from another account. API queries are scoped to the authenticated account.
+
+- **Separate counters and records:** `usage` stores monthly totals for quick queries, while `usage_records` stores accepted and rejected decisions for history and replay.
+
+- **Monthly counters:** Usage is stored separately for each UTC calendar month, preserving previous usage. Partial unique indexes allow one shared account counter and one counter per user per month. A null `user_id` identifies the shared account counter.
+
+- **Atomic consumption and concurrency:** A database transaction updates both counters and saves an accepted decision together. An account row lock serializes consumption within that account to prevent quota overruns, while different accounts can be processed concurrently.
+
+- **Account-scoped idempotency:** A unique constraint on `(account_id, request_id)` prevents duplicate records. Processing checks existing requests before updating counters, allowing safe replay while rejecting conflicting input.
+
+- **Data consistency:** Database constraints enforce positive requested units, non-negative usage, and a rejection reason for rejected records only.
+
+- **History indexing:** An index on `(account_id, created_at DESC, id DESC)` supports account-scoped history queries. The record ID provides deterministic ordering when creation timestamps are equal.
+
+### Database Relationships
+
+```mermaid
+erDiagram
+    accounts {
+        uuid id PK
+        varchar name
+        varchar api_key_hash UK
+        uuid plan_id FK
+        plan_type plan_type FK "Always account"
+        timestamptz created_at
+    }
+
+    plans {
+        uuid id PK
+        varchar name
+        plan_type plan_type "account or user"
+        integer monthly_allowance
+        integer max_units_per_request
+        uuid owner_account_id FK "NULL for public plans"
+        timestamptz created_at
+    }
+
+    users {
+        uuid id PK
+        varchar name
+        uuid account_id FK
+        uuid plan_id FK
+        plan_type plan_type FK "Always user"
+        timestamptz created_at
+    }
+
+    usage {
+        uuid id PK
+        uuid account_id FK
+        uuid user_id FK "NULL for shared account counters"
+        date period_start "First day of the UTC month"
+        integer used_units
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    usage_records {
+        uuid id PK
+        uuid account_id FK
+        uuid user_id FK
+        uuid request_id
+        integer requested_units
+        usage_record_status status "accepted or rejected"
+        varchar rejection_reason "NULL when accepted"
+        timestamptz created_at
+    }
+
+    plans ||--o{ accounts : "assigned account plan"
+    plans ||--o{ users : "assigned user plan"
+    accounts o|--o{ plans : "owns private plans"
+    accounts ||--o{ users : contains
+    accounts ||--o{ usage : tracks
+    users o|--o{ usage : "individual counters"
+    accounts ||--o{ usage_records : records
+    users ||--o{ usage_records : generates
+```
+
+The diagram shows all table fields and main relationships. Key constraints are explained in the design decisions above.
+
 ## Testing
 
 Backend tests use Jasmine, Supertest, and a separate PostgreSQL database named `usage_metering_test`.
 
-For host development, configure an untracked root `.env`:
+For local development and testing, copy the example configuration:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your local PostgreSQL credentials. Keep `.env` out of version control.
+
+Docker Compose uses the configuration in `compose.yaml` and does not require this file.
 
 ```dotenv
 DATABASE_URL=postgres://USER:PASSWORD@localhost:5432/usage_metering
@@ -273,6 +519,16 @@ See [performance/README.md](performance/README.md) for results, environment deta
 - **Backend tests:** Jasmine and Supertest.
 - **Performance tests:** k6.
 - **Local deployment:** Docker Compose and Nginx.
+
+## Limitations
+
+- API keys and saved replay requests are kept in browser memory and disappear on reload. Reconnect using the saved API key.
+- Navigating away before account creation completes may discard the returned API key. Key recovery and rotation are not implemented.
+- Historical plan-limit snapshots are not stored, so remaining allowances for previous months are returned as `null`.
+- Offset pagination may shift when new records are inserted. Record lists and total counts may reflect different database snapshots.
+- Per-account locking processes consumption requests sequentially within each account, limiting throughput under heavy traffic.
+- Character counting happens in the browser. The backend validates submitted units without receiving or verifying the original text.
+- Docker Compose is configured for local evaluation using demo database credentials and plain HTTP.
 
 ## AI Assistance
 
