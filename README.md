@@ -191,6 +191,118 @@ Plan lists accept an optional `planType=account` or `planType=user` filter. Usag
 
 History accepts `page` and `limit`, defaulting to 1 and 10. The maximum limit is 100.
 
+### API Request Examples
+
+Use `http://localhost:8080` as the base URL when running with Docker Compose.
+
+Send JSON bodies with `Content-Type: application/json`. Protected endpoints also require `x-api-key: YOUR_API_KEY`.
+
+#### Create an Account
+
+First, get available public account plans:
+
+```http
+GET /api/plans?planType=account
+```
+
+Use a returned plan ID to create an account. No API key is required:
+
+```http
+POST /api/accounts
+```
+
+```json
+{
+  "name": "Foothill",
+  "planId": "PUBLIC_ACCOUNT_PLAN_UUID"
+}
+```
+
+The response includes the account details and an `apiKey`. Save this key immediately; it cannot be retrieved later. Only its hash is stored in the database.
+
+#### Create a User
+
+Get available public and owned user plans using your API key:
+
+```http
+GET /api/plans/me?planType=user
+```
+
+Then create a user:
+
+```http
+POST /api/users
+```
+
+```json
+{
+  "name": "baraa",
+  "planId": "USER_PLAN_UUID"
+}
+```
+
+The user belongs to the account identified by the API key.
+
+#### Create a Private Plan
+
+```http
+POST /api/plans
+```
+
+```json
+{
+  "name": "Foothill Custom",
+  "planType": "account",
+  "monthlyAllowance": 5000,
+  "maxUnitsPerRequest": 200
+}
+```
+
+The plan belongs to the authenticated account. Use `"planType": "user"` to create a user plan.
+
+#### Update a Private Plan
+
+```http
+PATCH /api/plans/PRIVATE_PLAN_UUID
+```
+
+```json
+{
+  "monthlyAllowance": 8000,
+  "maxUnitsPerRequest": 300
+}
+```
+
+Only the owning account can update a private plan. Public plans cannot be edited.
+
+#### Change an Assigned Plan
+
+Change the authenticated account's plan:
+
+```http
+PATCH /api/accounts/me/plan
+```
+
+```json
+{
+  "planId": "ACCOUNT_PLAN_UUID"
+}
+```
+
+Change a user's plan:
+
+```http
+PATCH /api/users/USER_UUID/plan
+```
+
+```json
+{
+  "planId": "USER_PLAN_UUID"
+}
+```
+
+Plans must have the correct type and be public or owned by the authenticated account. Changing a plan preserves existing usage and history.
+
 ### Consumption Request
 
 Replace the placeholders with valid UUIDs:
