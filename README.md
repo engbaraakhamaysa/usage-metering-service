@@ -37,9 +37,12 @@ Startup automatically:
 3. Seeds missing predefined plans.
 4. Starts the backend and frontend.
 
-Open:
+### Application URLs
 
-http://localhost:8080
+- **Frontend:** http://localhost:8080
+- **API example:** http://localhost:8080/api/plans
+
+Nginx forwards `/api` requests to the backend, which runs inside Docker at `http://backend:3000`.
 
 Leave **API Base URL** blank to use the included API proxy.
 
@@ -133,7 +136,45 @@ An account may own multiple plans but has one assigned account plan at a time. U
 - Reusing it with a different user or unit count returns HTTP 409.
 - Request IDs are unique within an account.
 
-Consumption runs inside a database transaction. An account row lock serializes competing consumption requests for that account, and both counters and the decision record are committed together.
+Consumption runs inside a database transaction. An account row lock serializes competing consumption requests for that account. Accepted requests update both counters and save the decision together. Rejected requests save the decision without increasing either counter.
+
+### Consumption Request Flow
+
+```mermaid
+sequenceDiagram
+participant C as Client
+participant A as Backend API
+participant D as PostgreSQL
+
+    C->>A: Submit consumption request
+    A->>A: Authenticate and validate input
+    A->>D: Begin transaction
+    A->>D: Lock account row
+    A->>D: Find account request ID
+
+    alt Existing request
+        alt Same user and units
+            A->>D: End transaction without changes
+            A-->>C: Original decision, duplicate true
+        else Different user or units
+            A->>D: End transaction without changes
+            A-->>C: HTTP 409 conflict
+        end
+    else New request
+        A->>A: Determine current UTC month
+        A->>D: Read user, plans, and usage
+        A->>A: Check account and user limits
+        alt Within all limits
+            A->>D: Update both counters
+            A->>D: Save accepted record
+        else Limit exceeded
+            A->>D: Save rejected record
+            Note over A,D: Counters remain unchanged
+        end
+        A->>D: Commit transaction
+        A-->>C: HTTP 200 decision, duplicate false
+    end
+```
 
 ## Product Assumptions and Decisions
 
